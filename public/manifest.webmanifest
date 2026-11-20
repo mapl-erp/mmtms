@@ -1,0 +1,9 @@
+{
+  "name": "Mighty Movers Driver",
+  "short_name": "MM Driver",
+  "start_url": "/driver",
+  "display": "standalone",
+  "background_color": "#1b3a34",
+  "theme_color": "#1b3a34",
+  "icons": [{ "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }]
+}

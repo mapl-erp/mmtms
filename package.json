@@ -1,0 +1,34 @@
+{
+  "name": "mmtms",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "postinstall": "prisma generate",
+    "db:migrate": "bash scripts/prisma-as-owner.sh prisma migrate deploy",
+    "db:seed": "bash scripts/prisma-as-owner.sh tsx prisma/seed.ts",
+    "db:diff": "bash scripts/prisma-as-owner.sh prisma migrate diff --from-empty --to-schema-datamodel prisma/schema.prisma --script",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.6.0",
+    "jszip": "^3.10.1",
+    "next": "^15.3.1",
+    "pdf-lib": "^1.17.1",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.14.0",
+    "@types/react": "^19.1.0",
+    "@types/react-dom": "^19.1.0",
+    "prisma": "^6.6.0",
+    "tsx": "^4.19.3",
+    "typescript": "^5.8.3",
+    "vitest": "^3.1.1"
+  }
+}
