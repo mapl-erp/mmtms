@@ -2,6 +2,7 @@ import { can } from "./access";
 import { haversineMeters, theftNotes } from "./expenses";
 import type { Actor } from "./session";
 import type { Tx } from "./db";
+import { captureItc } from "./accounts";
 import { appendLedger } from "./ledger";
 import { parseSettings } from "./settings";
 
@@ -121,6 +122,13 @@ export async function decideFuel(tx: Tx, actor: Actor, fillId: string, decision:
     await tx.truck.update({
       where: { id: fill.truckId },
       data: { odometerKm: Math.max(fill.truck.odometerKm, fill.odometer) },
+    });
+    await captureItc(tx, actor, {
+      vendorName: fill.station,
+      category: "FUEL",
+      taxable: Number(fill.amount),
+      sourceType: "fuel_fill",
+      sourceId: fill.id,
     });
   }
   await appendLedger(tx, {

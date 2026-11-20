@@ -1,4 +1,5 @@
 import { can } from "./access";
+import { booksPort } from "./books";
 import type { Actor } from "./session";
 import type { Tx } from "./db";
 import { appendLedger } from "./ledger";
@@ -59,7 +60,15 @@ export async function createInvoice(
   if (!party) return { ok: false as const, error: "Party not found" };
   const count = await tx.invoice.count({ where: { tenantId: actor.tenantId } });
   const number = `INV-${String(count + 1).padStart(4, "0")}`;
-  const gst = gstBreakdown(input.gstMode, input.taxable);
+  const gst = gstBreakdown("EIGHTEEN_ITC", input.taxable);
+  const books = await booksPort().pushInvoice({
+    number,
+    party: party.name,
+    gstin: party.gstin,
+    taxable: input.taxable.toFixed(2),
+    gstAmount: gst.gstAmount.toFixed(2),
+    total: gst.total.toFixed(2),
+  });
   const invoice = await tx.invoice.create({
     data: {
       tenantId: actor.tenantId,
@@ -67,11 +76,13 @@ export async function createInvoice(
       tripId: input.tripId || null,
       partyId: party.id,
       taxable: input.taxable.toFixed(2),
-      gstMode: input.gstMode,
+      gstMode: "EIGHTEEN_ITC",
       gstRate: gst.gstRate.toFixed(2),
       gstAmount: gst.gstAmount.toFixed(2),
       total: gst.total.toFixed(2),
-      itcEligible: gst.itcEligible,
+      itcEligible: true,
+      externalId: books.externalId,
+      booksMode: books.mode,
     },
   });
   await appendLedger(tx, {
@@ -84,7 +95,8 @@ export async function createInvoice(
       number,
       party: party.name,
       taxable: input.taxable.toFixed(2),
-      gstMode: input.gstMode,
+      gstMode: "EIGHTEEN_ITC",
+      books: books.externalId,
       gstRate: gst.gstRate.toFixed(2),
       gstAmount: gst.gstAmount.toFixed(2),
       total: gst.total.toFixed(2),

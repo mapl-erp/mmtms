@@ -1,6 +1,7 @@
 import { can } from "./access";
 import type { Actor } from "./session";
 import type { Tx } from "./db";
+import { captureItc } from "./accounts";
 import { appendLedger } from "./ledger";
 
 export async function completeJob(tx: Tx, actor: Actor, jobId: string) {
@@ -13,6 +14,15 @@ export async function completeJob(tx: Tx, actor: Actor, jobId: string) {
   });
   if (!job) return { ok: false as const, error: "Job not found" };
   await tx.workshopJob.update({ where: { id: job.id }, data: { status: "done" } });
+  if (Number(job.cost) > 0) {
+    await captureItc(tx, actor, {
+      vendorName: job.vendor ?? "Workshop",
+      category: "WORKSHOP",
+      taxable: Number(job.cost),
+      sourceType: "workshop_job",
+      sourceId: job.id,
+    });
+  }
   await appendLedger(tx, {
     tenantId: actor.tenantId,
     eventType: "workshop.completed",

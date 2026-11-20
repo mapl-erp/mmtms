@@ -1,6 +1,7 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import { recordPayment, sendDailySummary } from "@/lib/accounts";
 import { loadActor } from "@/lib/access";
 import { withTenant } from "@/lib/db";
 import { createInvoice, type GstMode } from "@/lib/billing";
@@ -189,6 +190,27 @@ export async function saveThresholdsAction(formData: FormData) {
     }),
   );
   back("/alerts", result.ok ? undefined : result.error);
+}
+
+export async function recordPaymentAction(formData: FormData) {
+  const session = await requireSession();
+  const result = await withTenant(session.tid, async (tx) =>
+    recordPayment(tx, await loadActor(tx, session), {
+      partyId: String(formData.get("partyId") ?? ""),
+      invoiceId: String(formData.get("invoiceId") ?? "") || null,
+      amount: Number(formData.get("amount") ?? 0),
+      method: String(formData.get("method") ?? "NEFT") as "NEFT" | "UPI" | "CHEQUE",
+      reference: String(formData.get("reference") ?? ""),
+      receivedOn: String(formData.get("receivedOn") ?? ""),
+    }),
+  );
+  back("/billing", result.ok ? undefined : result.error);
+}
+
+export async function dailySummaryAction() {
+  const session = await requireSession();
+  const result = await withTenant(session.tid, async (tx) => sendDailySummary(tx, await loadActor(tx, session)));
+  back("/reports", result.ok ? undefined : "Could not write the summary");
 }
 
 export async function previewTamperAction() {

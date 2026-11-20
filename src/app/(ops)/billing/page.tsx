@@ -1,4 +1,4 @@
-import { createInvoiceAction } from "@/app/(ops)/actions";
+import { createInvoiceAction, recordPaymentAction } from "@/app/(ops)/actions";
 import { Flash, Pill } from "@/components/ui";
 import { withTenant } from "@/lib/db";
 import { fmtDate, inr, num } from "@/lib/format";
@@ -24,8 +24,8 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
       <div className="row">
         <div>
           <p className="kicker">Billing</p>
-          <h1>5% without ITC, or 18% with it</h1>
-          <p className="lede">Tally takes the CSV. The voucher list is the same set of invoices.</p>
+          <h1>18% GST, full ITC</h1>
+          <p className="lede">Forward charge on freight. Purchases capture ITC. Zoho Books receives the invoice when a token is configured, and the Tally CSV stays as the fallback.</p>
         </div>
         <a className="btn" href="/api/billing/tally">
           Download Tally CSV
@@ -59,7 +59,10 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
                       <Pill tone={invoice.itcEligible ? "ok" : "warn"}>{invoice.itcEligible ? "ITC" : "No ITC"}</Pill>
                     </div>
                   </td>
-                  <td>{inr(num(invoice.total))}</td>
+                  <td>
+                    {inr(num(invoice.total))}
+                    <div className="muted">{invoice.booksMode === "zoho" ? invoice.externalId : invoice.externalId ? `${invoice.externalId} simulated` : ""}</div>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -92,15 +95,57 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
             Taxable ₹
             <input name="taxable" type="number" min="1" step="0.01" required />
           </label>
-          <label>
-            GST
-            <select name="gstMode" defaultValue="EIGHTEEN_ITC">
-              <option value="EIGHTEEN_ITC">18% with ITC</option>
-              <option value="FIVE_NO_ITC">5% without ITC</option>
-            </select>
-          </label>
+          <input type="hidden" name="gstMode" value="EIGHTEEN_ITC" />
+          <p className="muted">GST is 18% with ITC on every new invoice.</p>
           <button className="btn" type="submit">
             Create invoice
+          </button>
+        </form>
+        <form className="panel form" action={recordPaymentAction}>
+          <h2>Receipt</h2>
+          <label>
+            Party
+            <select name="partyId">
+              {data.parties.map((party) => (
+                <option key={party.id} value={party.id}>
+                  {party.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Match to invoice
+            <select name="invoiceId">
+              <option value="">Unallocated</option>
+              {data.invoices.map((invoice) => (
+                <option key={invoice.id} value={invoice.id}>
+                  {invoice.number} · {invoice.party.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Amount ₹
+            <input name="amount" type="number" min="1" step="0.01" required />
+          </label>
+          <label>
+            Method
+            <select name="method">
+              <option value="NEFT">NEFT</option>
+              <option value="UPI">UPI</option>
+              <option value="CHEQUE">Cheque</option>
+            </select>
+          </label>
+          <label>
+            Reference
+            <input name="reference" required />
+          </label>
+          <label>
+            Received
+            <input name="receivedOn" type="date" required />
+          </label>
+          <button className="btn" type="submit">
+            Record receipt
           </button>
         </form>
       </div>

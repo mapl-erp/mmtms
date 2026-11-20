@@ -2,6 +2,8 @@ import { previewTamperAction } from "@/app/(ops)/actions";
 import { withTenant } from "@/lib/db";
 import { fmtWhen } from "@/lib/format";
 import { requireSession } from "@/lib/session";
+import { retentionUntil } from "@/lib/accounts";
+import { fmtDate } from "@/lib/format";
 import { verifyEvents, verifyTenant, type ChainRow } from "@/lib/verify";
 
 export const metadata = { title: "Evidence" };
@@ -31,7 +33,7 @@ export default async function EvidencePage({ searchParams }: { searchParams: Pro
       <p className="kicker">Evidence</p>
       <h1>{data.verified.ok ? "Hash chain intact" : "Hash chain broken"}</h1>
       <p className="lede">
-        Each row is SHA-256 of the previous hash, the canonical payload, and the file hashes. Postgres rejects update and delete on the ledger.
+        Each row is SHA-256 of the previous hash, the canonical payload, and the file hashes. Postgres rejects update and delete on the ledger. This year’s bundle stays sealed until {fmtDate(retentionUntil())}.
       </p>
       <div className={data.verified.ok ? "intact section" : "break section"}>
         <strong>{data.verified.count} events</strong>
