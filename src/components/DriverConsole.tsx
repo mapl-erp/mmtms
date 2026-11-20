@@ -377,6 +377,19 @@ export function DriverConsole({ trip, driverName }: { trip: Trip | null; driverN
                 Save signature
               </button>
             </section>
+            <button
+              className="btn bad"
+              type="button"
+              onClick={() => {
+                void fetch("/api/driver/panic", {
+                  method: "POST",
+                  headers: { "content-type": "application/json" },
+                  body: JSON.stringify({ tripId: trip?.id ?? null }),
+                }).then(() => setMessage("Panic sent to the owner and the manager"));
+              }}
+            >
+              Panic
+            </button>
             {queued > 0 ? (
               <button className="btn secondary" type="button" onClick={() => void flush()}>
                 Send queued proofs

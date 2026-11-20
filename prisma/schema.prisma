@@ -41,6 +41,8 @@ model Tenant {
   allocations  PaymentAllocation[]
   purchases    Purchase[]
   mails        OutboxMail[]
+  devices      Device[]
+  deviceLogs   DeviceLog[]
   bookings     Booking[]
   attendance   Attendance[]
   adjustments  PayrollAdjustment[]
@@ -137,6 +139,7 @@ model Truck {
   jobs        WorkshopJob[]
   tyres       Tyre[]
   assignments Assignment[]
+  devices     Device[]
 
   @@unique([tenantId, regNo])
   @@index([tenantId])
@@ -561,6 +564,47 @@ model OutboxMail {
 
   @@index([tenantId])
   @@map("outbox_mails")
+}
+
+model Device {
+  id           String    @id @default(uuid()) @db.Uuid
+  tenantId     String    @map("tenant_id") @db.Uuid
+  truckId      String?   @map("truck_id") @db.Uuid
+  kind         String
+  serial       String
+  vendor       String
+  firmware     String
+  simNumber    String?   @map("sim_number")
+  status       String    @default("online")
+  warrantyUntil DateTime? @map("warranty_until") @db.Date
+  ais140Until  DateTime? @map("ais140_until") @db.Date
+  config       Json      @default("{}")
+  installedAt  DateTime  @default(now()) @map("installed_at") @db.Timestamptz(3)
+
+  tenant Tenant     @relation(fields: [tenantId], references: [id])
+  truck  Truck?     @relation(fields: [truckId], references: [id])
+  logs   DeviceLog[]
+
+  @@unique([tenantId, serial])
+  @@index([tenantId])
+  @@map("devices")
+}
+
+model DeviceLog {
+  id        String   @id @default(uuid()) @db.Uuid
+  tenantId  String   @map("tenant_id") @db.Uuid
+  deviceId  String   @map("device_id") @db.Uuid
+  truckId   String?  @map("truck_id") @db.Uuid
+  action    String
+  note      String
+  actorId   String?  @map("actor_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+  device Device @relation(fields: [deviceId], references: [id])
+
+  @@index([tenantId])
+  @@map("device_logs")
 }
 
 model Attendance {

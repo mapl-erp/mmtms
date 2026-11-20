@@ -36,6 +36,8 @@ function istDay(offset: number): string {
 async function wipe(client: PrismaClient, tenantId: string) {
   await client.$executeRawUnsafe(`ALTER TABLE ledger_events DISABLE TRIGGER ledger_no_mutation`);
   try {
+    await client.deviceLog.deleteMany({ where: { tenantId } });
+    await client.device.deleteMany({ where: { tenantId } });
     await client.paymentAllocation.deleteMany({ where: { tenantId } });
     await client.payment.deleteMany({ where: { tenantId } });
     await client.purchase.deleteMany({ where: { tenantId } });
@@ -230,6 +232,75 @@ async function main() {
       emergencyPhone: "9845000092",
       medicalExpiry: new Date(`${istDay(90)}T00:00:00.000Z`),
       biometricConsentAt: new Date(),
+    },
+  });
+
+  await prisma.device.create({
+    data: {
+      tenantId: tid,
+      truckId: benz.id,
+      kind: "GPS",
+      serial: "GPS-3501",
+      vendor: "iTriangle",
+      firmware: "4.1.0",
+      simNumber: "8991000000003501",
+      warrantyUntil: new Date(`${istDay(400)}T00:00:00.000Z`),
+      ais140Until: new Date(`${istDay(150)}T00:00:00.000Z`),
+    },
+  });
+  await prisma.device.create({
+    data: {
+      tenantId: tid,
+      truckId: benz.id,
+      kind: "IMMOBILISER",
+      serial: "IM-3501",
+      vendor: "Accolade",
+      firmware: "1.4.2",
+      warrantyUntil: new Date(`${istDay(300)}T00:00:00.000Z`),
+    },
+  });
+  await prisma.device.create({
+    data: {
+      tenantId: tid,
+      truckId: benz.id,
+      kind: "MDVR",
+      serial: "MDVR-3501",
+      vendor: "Streamax",
+      firmware: "8.0.3",
+      config: { channels: 8, cameras: 6, retentionDays: 15 },
+    },
+  });
+  await prisma.device.create({
+    data: {
+      tenantId: tid,
+      truckId: signa.id,
+      kind: "GPS",
+      serial: "GPS-3502",
+      vendor: "iTriangle",
+      firmware: "4.1.0",
+      simNumber: "8991000000003502",
+      ais140Until: new Date(`${istDay(110)}T00:00:00.000Z`),
+    },
+  });
+  await prisma.device.create({
+    data: {
+      tenantId: tid,
+      truckId: signa.id,
+      kind: "ELOCK",
+      serial: "EL-3502",
+      vendor: "Sensorise",
+      firmware: "3.2.1",
+      config: { otp: "446688" },
+    },
+  });
+  await prisma.device.create({
+    data: {
+      tenantId: tid,
+      truckId: signa.id,
+      kind: "DMS",
+      serial: "DMS-3502",
+      vendor: "Netradyne",
+      firmware: "2.9.0",
     },
   });
 

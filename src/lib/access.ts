@@ -14,6 +14,7 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     "billing.manage",
     "expenses.approve",
     "alerts.manage",
+    "devices.command",
     "evidence.view",
     "map.view",
     "users.view",

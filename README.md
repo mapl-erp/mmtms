@@ -61,12 +61,23 @@ MQTT topics, if a broker is connected later:
 
 There is no broker in this build. Leave the simulator in place until `GPS_FEED=mqtt` and `MQTT_URL` are both set and a subscriber is added behind the same position shape.
 
-## What the desk does in this phase
+## Modules
 
-Fleet documents and expiry alerts (30, 15, 7 days, and the expiry day), drivers and assignment history, parties and last quotes, trips through planned, loading, in transit, delivered, and closed, LR PDFs, fuel approval with a km/l flag, workshop jobs and the tyre register, invoices at 5% without ITC or 18% with ITC, a Tally CSV, and an evidence zip per trip. The Evidence page recomputes the chain. “Preview a tampered copy” flips the latest payload in memory and does not write.
+The approved spec is in the app. These pieces are simulated rather than wired to a vendor:
 
-## Roadmap
+- GPS positions come from the corridor simulator, not a tracker.
+- Zoho Books pushes return a simulated id until `ZOHO_ACCESS_TOKEN` and `ZOHO_ORG_ID` are set. The Tally CSV is the fallback and is always real.
+- The daily summary is written to `data/outbox` and shown on Reports. There is no SMTP sender.
+- Immobiliser, e-lock, DMS, and the six-camera recorder are adapter interfaces with simulators. Event clips are hashed into the ledger.
+- Consignee OTP is shown on the driver phone in development and printed in the server log. No SMS is sent.
+- Phone OTP and face check at login are named and unwired.
+- ULIP, VAHAN, and the government e-way API are not called. The customer generates the e-way bill and the desk stores the number and its expiry.
+- Subscription billing for other transporters is not built. A second tenant is another row behind the same RLS policies.
 
-Phase 2 was the hardware and government-portal work: on-board weighing, TPMS, alcohol interlock, driver-monitoring events, immobiliser commands, e-locks, and live ULIP, VAHAN, and e-way bill calls. The approved module spec pulls the device behaviour forward behind adapter interfaces and simulators. Live ULIP, VAHAN, and government e-way APIs stay out until credentials exist. Customers still generate the e-way bill; the desk records the number.
+Thresholds (overspeed, stop time, food cap, owner-approval amount, fuel drop, km/l ratio, weight shortage, e-way warning, immobiliser speed, geofence) live on the tenant and are edited under Alerts.
 
-Phase 3 is the company’s own device, plus SaaS onboarding and subscription billing for other transporters. The schema is already one row per tenant. Creating the second tenant is a seed concern, not a billing product yet.
+`npm test` covers the hash chain, a real tampered ledger row, a changed media file, row-level security, the trip lifecycle, per-tenant financial-year LR numbers, encrypted KYC, the expired-document override, fuel theft, 18% GST with receipt matching, and the immobiliser and e-lock rules.
+
+## Roadmap still open
+
+Live ULIP, VAHAN, and e-way bill calls. A real MQTT subscriber in front of `src/lib/gps.ts`. The company’s own device in place of the simulators. SaaS onboarding and subscription billing.

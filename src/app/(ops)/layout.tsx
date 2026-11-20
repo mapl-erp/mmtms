@@ -16,6 +16,7 @@ const NAV = [
   ["/workshop", "Workshop"],
   ["/billing", "Billing"],
   ["/reports", "Reports"],
+  ["/devices", "Devices"],
   ["/evidence", "Evidence"],
   ["/team", "Team"],
   ["/portal", "Portal"],
