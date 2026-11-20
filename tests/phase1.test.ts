@@ -15,6 +15,7 @@ const admin = new PrismaClient({ datasourceUrl: process.env.MIGRATE_DATABASE_URL
 async function wipe(tenantId: string) {
   await admin.$executeRawUnsafe(`ALTER TABLE ledger_events DISABLE TRIGGER ledger_no_mutation`);
   try {
+    await admin.documentOverride.deleteMany({ where: { tenantId } });
     await admin.proof.deleteMany({ where: { tenantId } });
     await admin.fuelFill.deleteMany({ where: { tenantId } });
     await admin.invoice.deleteMany({ where: { tenantId } });
@@ -29,6 +30,7 @@ async function wipe(tenantId: string) {
     await admin.ledgerEvent.deleteMany({ where: { tenantId } });
     await admin.driver.deleteMany({ where: { tenantId } });
     await admin.truck.deleteMany({ where: { tenantId } });
+    await admin.branch.deleteMany({ where: { tenantId } });
     await admin.party.deleteMany({ where: { tenantId } });
     await admin.tenant.delete({ where: { id: tenantId } }).catch(() => undefined);
   } finally {

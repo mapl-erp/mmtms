@@ -1,3 +1,4 @@
+import { can } from "./access";
 import type { Actor } from "./session";
 import type { Tx } from "./db";
 import { appendLedger } from "./ledger";
@@ -7,7 +8,7 @@ export async function registerDocument(
   actor: Actor,
   input: { truckId: string; docType: string; docNumber: string; expiresOn: string },
 ) {
-  if (actor.role !== "OWNER" && actor.role !== "MANAGER") {
+  if (!can(actor, "fleet.manage")) {
     return { ok: false as const, error: "Only the desk can file a document" };
   }
   const truck = await tx.truck.findFirst({ where: { id: input.truckId, tenantId: actor.tenantId } });

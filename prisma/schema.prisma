@@ -19,6 +19,8 @@ model Tenant {
   drivers     Driver[]
   parties     Party[]
   trips       Trip[]
+  branches    Branch[]
+  overrides   DocumentOverride[]
   documents   TruckDocument[]
   ledger      LedgerEvent[]
   files       StoredFile[]
@@ -39,12 +41,15 @@ model User {
   email        String
   passwordHash String   @map("password_hash")
   name         String
-  role         String
-  driverId     String?  @map("driver_id") @db.Uuid
-  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  role                  String
+  driverId              String?  @map("driver_id") @db.Uuid
+  branchId              String?  @map("branch_id") @db.Uuid
+  permissionOverrides   Json     @default("{}") @map("permission_overrides")
+  createdAt             DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
 
   tenant Tenant  @relation(fields: [tenantId], references: [id])
   driver Driver? @relation(fields: [driverId], references: [id])
+  branch Branch? @relation(fields: [branchId], references: [id])
 
   @@unique([tenantId, email])
   @@index([tenantId])
@@ -60,8 +65,22 @@ model Driver {
   dlExpiry      DateTime  @map("dl_expiry") @db.Date
   badgeNumber   String?   @map("badge_number")
   badgeExpiry   DateTime? @map("badge_expiry") @db.Date
-  monthlySalary Decimal   @default(0) @map("monthly_salary") @db.Decimal(12, 2)
-  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  monthlySalary      Decimal   @default(0) @map("monthly_salary") @db.Decimal(12, 2)
+  address            String?
+  aadhaarEnc         String?   @map("aadhaar_enc")
+  aadhaarLast4       String?   @map("aadhaar_last4")
+  panEnc             String?   @map("pan_enc")
+  panLast4           String?   @map("pan_last4")
+  bankAccountEnc     String?   @map("bank_account_enc")
+  bankLast4          String?   @map("bank_last4")
+  bankIfscEnc        String?   @map("bank_ifsc_enc")
+  policeVerification String?   @map("police_verification")
+  referenceNotes     String?   @map("reference_notes")
+  emergencyName      String?   @map("emergency_name")
+  emergencyPhone     String?   @map("emergency_phone")
+  medicalExpiry      DateTime? @map("medical_expiry") @db.Date
+  biometricConsentAt DateTime? @map("biometric_consent_at") @db.Timestamptz(3)
+  createdAt          DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
 
   tenant      Tenant       @relation(fields: [tenantId], references: [id])
   users       User[]
@@ -81,11 +100,24 @@ model Truck {
   capacityTons Decimal  @map("capacity_tons") @db.Decimal(6, 2)
   wheels       Int
   status       String
-  expectedKmpl Decimal  @map("expected_kmpl") @db.Decimal(5, 2)
-  odometerKm   Int      @default(0) @map("odometer_km")
-  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  expectedKmpl    Decimal  @map("expected_kmpl") @db.Decimal(5, 2)
+  odometerKm      Int      @default(0) @map("odometer_km")
+  branchId        String?  @map("branch_id") @db.Uuid
+  ownershipType   String   @default("OWN") @map("ownership_type")
+  ownerPartyId    String?  @map("owner_party_id") @db.Uuid
+  hireTerms       String?  @map("hire_terms")
+  purchaseCost    Decimal? @map("purchase_cost") @db.Decimal(14, 2)
+  depreciationPct Decimal? @map("depreciation_pct") @db.Decimal(5, 2)
+  loanEmi         Decimal? @map("loan_emi") @db.Decimal(12, 2)
+  financer        String?
+  bodyType        String?  @map("body_type")
+  trailerDetails  String?  @map("trailer_details")
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
 
   tenant      Tenant          @relation(fields: [tenantId], references: [id])
+  branch      Branch?         @relation(fields: [branchId], references: [id])
+  ownerParty  Party?          @relation("TruckOwner", fields: [ownerPartyId], references: [id])
+  overrides   DocumentOverride[]
   documents   TruckDocument[]
   trips       Trip[]
   fuels       FuelFill[]
@@ -119,11 +151,14 @@ model Party {
   tenantId String  @map("tenant_id") @db.Uuid
   name     String
   kind     String
+  tags     String[] @default([])
   gstin    String?
+  pan      String?
   phone    String?
   city     String?
 
   tenant         Tenant    @relation(fields: [tenantId], references: [id])
+  ownedTrucks    Truck[]   @relation("TruckOwner")
   quotes         Quote[]
   invoices       Invoice[]
   customerTrips  Trip[]    @relation("TripCustomer")
@@ -187,6 +222,7 @@ model Trip {
   fuels       FuelFill[]
   invoices    Invoice[]
   assignments Assignment[]
+  overrides   DocumentOverride[]
 
   @@unique([tenantId, number])
   @@unique([tenantId, lrNumber])
@@ -328,6 +364,40 @@ model Assignment {
 
   @@index([tenantId])
   @@map("assignments")
+}
+
+model Branch {
+  id        String   @id @default(uuid()) @db.Uuid
+  tenantId  String   @map("tenant_id") @db.Uuid
+  name      String
+  code      String
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  tenant Tenant  @relation(fields: [tenantId], references: [id])
+  users  User[]
+  trucks Truck[]
+
+  @@unique([tenantId, code])
+  @@index([tenantId])
+  @@map("branches")
+}
+
+model DocumentOverride {
+  id        String   @id @default(uuid()) @db.Uuid
+  tenantId  String   @map("tenant_id") @db.Uuid
+  truckId   String   @map("truck_id") @db.Uuid
+  tripId    String?  @map("trip_id") @db.Uuid
+  docType   String   @map("doc_type")
+  reason    String
+  actorId   String   @map("actor_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+  truck  Truck  @relation(fields: [truckId], references: [id])
+  trip   Trip?  @relation(fields: [tripId], references: [id])
+
+  @@index([tenantId])
+  @@map("document_overrides")
 }
 
 model LedgerEvent {

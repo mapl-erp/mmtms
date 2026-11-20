@@ -75,14 +75,22 @@ export async function clearSessionCookie() {
   jar.delete(COOKIE);
 }
 
-export function actorFrom(session: Session) {
+export function actorFrom(session: Session): Actor {
   return {
     id: session.uid,
     tenantId: session.tid,
     role: session.role,
     name: session.name,
     driverId: session.driverId,
+    permissionOverrides: {},
   };
 }
 
-export type Actor = ReturnType<typeof actorFrom>;
+export type Actor = {
+  id: string;
+  tenantId: string;
+  role: string;
+  name: string;
+  driverId: string | null;
+  permissionOverrides?: unknown;
+};

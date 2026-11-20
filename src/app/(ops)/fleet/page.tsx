@@ -1,7 +1,7 @@
 import { Flash, Pill, Plate } from "@/components/ui";
-import { registerDocumentAction } from "@/app/(ops)/actions";
+import { registerDocumentAction, saveOwnershipAction } from "@/app/(ops)/actions";
 import { withTenant } from "@/lib/db";
-import { fmtDate, num, titleCase } from "@/lib/format";
+import { fmtDate, inr, num, titleCase } from "@/lib/format";
 import { daysUntil, documentAlert, parseSettings } from "@/lib/settings";
 import { requireSession } from "@/lib/session";
 
@@ -16,10 +16,18 @@ export default async function FleetPage({ searchParams }: { searchParams: Promis
     const tenant = await tx.tenant.findUniqueOrThrow({ where: { id: session.tid } });
     const rows = await tx.truck.findMany({
       where: { tenantId: session.tid },
-      include: { documents: { orderBy: { expiresOn: "asc" } } },
+      include: {
+        documents: { orderBy: { expiresOn: "asc" } },
+        ownerParty: true,
+        branch: true,
+        trips: true,
+        fuels: true,
+        jobs: true,
+      },
       orderBy: { regNo: "asc" },
     });
-    return { settings: parseSettings(tenant.settings), rows };
+    const parties = await tx.party.findMany({ where: { tenantId: session.tid }, orderBy: { name: "asc" } });
+    return { settings: parseSettings(tenant.settings), rows, parties };
   });
   return (
     <>
@@ -34,9 +42,20 @@ export default async function FleetPage({ searchParams }: { searchParams: Promis
               <header className="between">
                 <Plate>{truck.regNo}</Plate>
                 <span className="muted">
-                  {truck.make} {truck.model} · {num(truck.capacityTons)} t · {truck.odometerKm.toLocaleString("en-IN")} km
+                  {truck.make} {truck.model} · {num(truck.capacityTons)} t · {truck.odometerKm.toLocaleString("en-IN")} km · {truck.branch?.name ?? "No branch"}
                 </span>
               </header>
+              <p>
+                {titleCase(truck.ownershipType)}
+                {truck.ownerParty ? ` · ${truck.ownerParty.name}` : ""} · {truck.bodyType ?? "body not set"} · {truck.trailerDetails ?? "trailer not set"}
+              </p>
+              <p className="muted">
+                Purchase {truck.purchaseCost ? inr(num(truck.purchaseCost)) : "—"} · depreciation {truck.depreciationPct ? `${num(truck.depreciationPct)}% a year` : "—"} · EMI {truck.loanEmi ? inr(num(truck.loanEmi)) : "—"} {truck.financer ?? ""}
+              </p>
+              <p className="muted">
+                Freight {inr(truck.trips.reduce((sum, trip) => sum + num(trip.freight), 0))} · fuel {inr(truck.fuels.filter((fill) => fill.status === "approved").reduce((sum, fill) => sum + num(fill.amount), 0))} · workshop {inr(truck.jobs.reduce((sum, job) => sum + num(job.cost), 0))}
+                {truck.hireTerms ? ` · hire: ${truck.hireTerms}` : ""}
+              </p>
               <table>
                 <thead>
                   <tr>
@@ -101,6 +120,71 @@ export default async function FleetPage({ searchParams }: { searchParams: Promis
           </label>
           <button className="btn" type="submit">
             File it
+          </button>
+        </form>
+        <form className="panel form" action={saveOwnershipAction}>
+          <h2>Ownership</h2>
+          <label>
+            Truck
+            <select name="truckId">
+              {trucks.rows.map((truck) => (
+                <option key={truck.id} value={truck.id}>
+                  {truck.regNo}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Type
+            <select name="ownershipType" defaultValue="OWN">
+              <option value="OWN">Own</option>
+              <option value="ATTACHED">Attached</option>
+              <option value="MARKET">Market</option>
+            </select>
+          </label>
+          <label>
+            Owner party
+            <select name="ownerPartyId">
+              <option value="">—</option>
+              {trucks.parties.map((party) => (
+                <option key={party.id} value={party.id}>
+                  {party.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Hire terms
+            <input name="hireTerms" placeholder="Per km or monthly, for attached and market" />
+          </label>
+          <div className="grid2">
+            <label>
+              Purchase ₹
+              <input name="purchaseCost" type="number" step="1" />
+            </label>
+            <label>
+              Depreciation %
+              <input name="depreciationPct" type="number" step="0.1" />
+            </label>
+            <label>
+              EMI ₹
+              <input name="loanEmi" type="number" step="1" />
+            </label>
+            <label>
+              Financer
+              <input name="financer" />
+            </label>
+            <label>
+              Body
+              <input name="bodyType" placeholder="Container" />
+            </label>
+            <label>
+              Trailer
+              <input name="trailerDetails" placeholder="40 ft tri-axle" />
+            </label>
+          </div>
+          <button className="btn" type="submit">
+            Save ownership
           </button>
         </form>
       </div>

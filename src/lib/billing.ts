@@ -1,3 +1,4 @@
+import { can } from "./access";
 import type { Actor } from "./session";
 import type { Tx } from "./db";
 import { appendLedger } from "./ledger";
@@ -51,7 +52,7 @@ export async function createInvoice(
   actor: Actor,
   input: { partyId: string; tripId?: string | null; taxable: number; gstMode: GstMode },
 ) {
-  if (!["OWNER", "MANAGER", "ACCOUNTANT"].includes(actor.role)) {
+  if (!can(actor, "billing.manage")) {
     return { ok: false as const, error: "Billing is for the desk" };
   }
   const party = await tx.party.findFirst({ where: { id: input.partyId, tenantId: actor.tenantId } });

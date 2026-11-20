@@ -114,6 +114,10 @@ export default async function TripsPage({ searchParams }: { searchParams: Promis
               <input name="distanceKm" type="number" step="1" min="0" />
             </label>
           </div>
+          <label>
+            Owner override reason
+            <input name="overrideReason" placeholder="Only if a paper is expired" />
+          </label>
           <button className="btn" type="submit">
             Create trip
           </button>

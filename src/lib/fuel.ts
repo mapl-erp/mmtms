@@ -1,3 +1,4 @@
+import { can } from "./access";
 import type { Actor } from "./session";
 import type { Tx } from "./db";
 import { appendLedger } from "./ledger";
@@ -66,8 +67,8 @@ export async function recordFuel(
 }
 
 export async function decideFuel(tx: Tx, actor: Actor, fillId: string, decision: "approved" | "rejected") {
-  if (actor.role !== "OWNER" && actor.role !== "MANAGER") {
-    return { ok: false as const, error: "Only the owner or a manager can approve fuel" };
+  if (!can(actor, "fuel.approve")) {
+    return { ok: false as const, error: "You cannot approve fuel" };
   }
   const fill = await tx.fuelFill.findFirst({
     where: { id: fillId, tenantId: actor.tenantId },

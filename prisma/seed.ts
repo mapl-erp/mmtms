@@ -1,4 +1,5 @@
 import { PrismaClient } from "@prisma/client";
+import { encryptField, last4 } from "../src/lib/crypto";
 import { labeledSvg } from "../src/lib/files";
 import { appendLedger } from "../src/lib/ledger";
 import { hashPassword } from "../src/lib/password";
@@ -34,6 +35,7 @@ function istDay(offset: number): string {
 async function wipe(client: PrismaClient, tenantId: string) {
   await client.$executeRawUnsafe(`ALTER TABLE ledger_events DISABLE TRIGGER ledger_no_mutation`);
   try {
+    await client.documentOverride.deleteMany({ where: { tenantId } });
     await client.proof.deleteMany({ where: { tenantId } });
     await client.fuelFill.deleteMany({ where: { tenantId } });
     await client.invoice.deleteMany({ where: { tenantId } });
@@ -48,6 +50,7 @@ async function wipe(client: PrismaClient, tenantId: string) {
     await client.ledgerEvent.deleteMany({ where: { tenantId } });
     await client.driver.deleteMany({ where: { tenantId } });
     await client.truck.deleteMany({ where: { tenantId } });
+    await client.branch.deleteMany({ where: { tenantId } });
     await client.party.deleteMany({ where: { tenantId } });
     await client.tenant.delete({ where: { id: tenantId } });
   } finally {
@@ -110,6 +113,13 @@ async function main() {
     name: "Anil Joshi",
     driverId: null,
   };
+  const owner: Actor = {
+    id: users.OWNER,
+    tenantId: tid,
+    role: "OWNER",
+    name: "Brij Pal",
+    driverId: null,
+  };
 
   const benz = await prisma.truck.create({
     data: {
@@ -138,12 +148,85 @@ async function main() {
     },
   });
 
+  const branch = await prisma.branch.create({
+    data: { tenantId: tid, name: "Pune HQ", code: "PUNE" },
+  });
+  await prisma.user.updateMany({ where: { tenantId: tid }, data: { branchId: branch.id } });
+  await prisma.truck.update({
+    where: { id: benz.id },
+    data: {
+      branchId: branch.id,
+      ownershipType: "OWN",
+      purchaseCost: "4250000",
+      depreciationPct: "15",
+      loanEmi: "78500",
+      financer: "Sundaram Finance",
+      bodyType: "Container",
+      trailerDetails: "40 ft tri-axle",
+    },
+  });
+  await prisma.truck.update({
+    where: { id: signa.id },
+    data: {
+      branchId: branch.id,
+      ownershipType: "OWN",
+      purchaseCost: "3980000",
+      depreciationPct: "15",
+      loanEmi: "74200",
+      financer: "Tata Motors Finance",
+      bodyType: "Open body",
+      trailerDetails: "32 ft tri-axle",
+    },
+  });
+  const rameshAadhaar = "2341 5678 9012";
+  const sureshAadhaar = "3456 7890 1234";
+  await prisma.driver.update({
+    where: { id: ramesh.id },
+    data: {
+      address: "Kothrud, Pune",
+      aadhaarEnc: encryptField(rameshAadhaar),
+      aadhaarLast4: last4(rameshAadhaar),
+      panEnc: encryptField("ABCPR1234R"),
+      panLast4: "234R",
+      bankAccountEnc: encryptField("501002220011"),
+      bankLast4: "0011",
+      bankIfscEnc: encryptField("HDFC0001234"),
+      policeVerification: "Pune rural, clear, Jan 2026",
+      referenceNotes: "Neighbour S. Patil, 9845000011",
+      emergencyName: "Sunita Pawar",
+      emergencyPhone: "9845000091",
+      medicalExpiry: new Date(`${istDay(200)}T00:00:00.000Z`),
+      biometricConsentAt: new Date(),
+    },
+  });
+  await prisma.driver.update({
+    where: { id: suresh.id },
+    data: {
+      address: "Hadapsar, Pune",
+      aadhaarEnc: encryptField(sureshAadhaar),
+      aadhaarLast4: last4(sureshAadhaar),
+      panEnc: encryptField("BCDPS5678S"),
+      panLast4: "678S",
+      bankAccountEnc: encryptField("612003330022"),
+      bankLast4: "0022",
+      bankIfscEnc: encryptField("SBIN0000456"),
+      policeVerification: "Pune city, clear, Mar 2026",
+      referenceNotes: "Cousin A. More, 9845000022",
+      emergencyName: "Lata More",
+      emergencyPhone: "9845000092",
+      medicalExpiry: new Date(`${istDay(90)}T00:00:00.000Z`),
+      biometricConsentAt: new Date(),
+    },
+  });
+
   const ganesh = await prisma.party.create({
     data: {
       tenantId: tid,
       name: "Shree Ganesh Steel",
       kind: "customer",
+      tags: ["customer", "consignee"],
       gstin: "27AAPCM8501F1Z8",
+      pan: "AAPCM8501F",
       phone: "9822011001",
       city: "Pune",
     },
@@ -153,6 +236,7 @@ async function main() {
       tenantId: tid,
       name: "Western Coil Mills",
       kind: "consignor",
+      tags: ["consignor"],
       gstin: "27AABCU4410Q1Z2",
       phone: "9822011002",
       city: "Mumbai",
@@ -163,6 +247,7 @@ async function main() {
       tenantId: tid,
       name: "Nashik Agro Pack",
       kind: "consignee",
+      tags: ["consignee", "customer"],
       gstin: "27AAGFN2201P1Z6",
       phone: "9822011003",
       city: "Nashik",
@@ -173,6 +258,7 @@ async function main() {
       tenantId: tid,
       name: "Deccan Load Brokers",
       kind: "broker",
+      tags: ["broker"],
       phone: "9822011004",
       city: "Pune",
     },
@@ -229,6 +315,26 @@ async function main() {
       actorId: actor.id,
       payload: { slug: SLUG, trucks: [benz.regNo, signa.regNo], drivers: [ramesh.name, suresh.name] },
     });
+    for (const truck of [benz, signa]) {
+      await appendLedger(tx, {
+        tenantId: tid,
+        eventType: "truck.ownership",
+        entityType: "truck",
+        entityId: truck.id,
+        actorId: actor.id,
+        payload: { truck: truck.regNo, ownershipType: "OWN" },
+      });
+    }
+    for (const driver of [ramesh, suresh]) {
+      await appendLedger(tx, {
+        tenantId: tid,
+        eventType: "driver.updated",
+        entityType: "driver",
+        entityId: driver.id,
+        actorId: actor.id,
+        payload: { name: driver.name, kycChanged: true },
+      });
+    }
     for (const [truckId, docType, docNumber, offset] of docs) {
       const filed = await registerDocument(tx, actor, { truckId, docType, docNumber, expiresOn: istDay(offset) });
       if (!filed.ok) throw new Error(filed.error);
@@ -248,8 +354,11 @@ async function main() {
       rate: number;
       seal?: string;
       through: "LOADING" | "IN_TRANSIT" | "CLOSED";
+      by?: Actor;
+      overrideReason?: string;
     }) {
-      const created = await createTrip(tx, actor, {
+      const who = input.by ?? actor;
+      const created = await createTrip(tx, who, {
         number: input.number,
         truckId: input.truckId,
         driverId: input.driverId,
@@ -262,6 +371,7 @@ async function main() {
         weightTons: input.weightTons,
         rateBasis: "FIXED",
         rate: input.rate,
+        overrideReason: input.overrideReason,
       });
       if (!created.ok) throw new Error(created.error);
       const id = created.data.id;
@@ -345,6 +455,8 @@ async function main() {
       weightTons: 28,
       rate: 76000,
       through: "LOADING",
+      by: owner,
+      overrideReason: "National permit renewal is with the RTO; owner allowed this loading",
     });
 
     const baseline = await recordFuel(tx, actor, {

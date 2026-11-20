@@ -1,9 +1,11 @@
 import { randomInt } from "node:crypto";
+import { can } from "./access";
 import type { Actor } from "./session";
 import type { Tx } from "./db";
 import { appendLedger } from "./ledger";
 import { storeBytes } from "./files";
 import { round2 } from "./format";
+import { daysUntil } from "./settings";
 
 const NEXT: Record<string, string> = {
   PLANNED: "LOADING",
@@ -36,7 +38,7 @@ export function podMissing(trip: TripShape): string[] {
 }
 
 function assertDesk(actor: Actor) {
-  if (actor.role !== "OWNER" && actor.role !== "MANAGER") {
+  if (!can(actor, "trips.manage")) {
     return "Only the owner or a manager can change a trip";
   }
   return null;
@@ -80,6 +82,7 @@ export async function createTrip(
     rateBasis: "PER_TONNE" | "FIXED" | "PER_KM";
     rate: number;
     distanceKm?: number | null;
+    overrideReason?: string | null;
   },
 ) {
   const denied = assertDesk(actor);
@@ -95,6 +98,15 @@ export async function createTrip(
     where: { tenantId: actor.tenantId, driverId: driver.id, status: { in: ["LOADING", "IN_TRANSIT"] } },
   });
   if (busyDriver) return { ok: false as const, error: `${driver.name} is already on ${busyDriver.number}` };
+  const documents = await tx.truckDocument.findMany({ where: { tenantId: actor.tenantId, truckId: truck.id } });
+  const expired = documents.filter((doc) => daysUntil(doc.expiresOn) < 0);
+  const overrideReason = input.overrideReason?.trim() ?? "";
+  if (expired.length && (!can(actor, "documents.override") || overrideReason.length < 8)) {
+    return {
+      ok: false as const,
+      error: `${truck.regNo} has expired papers (${expired.map((doc) => doc.docType).join(", ")}). Only the owner can override, and the reason is logged.`,
+    };
+  }
   let freight = input.rate;
   if (input.rateBasis === "PER_TONNE") freight = input.rate * input.weightTons;
   if (input.rateBasis === "PER_KM") {
@@ -124,6 +136,28 @@ export async function createTrip(
       lrNumber,
     },
   });
+  if (expired.length) {
+    for (const doc of expired) {
+      const override = await tx.documentOverride.create({
+        data: {
+          tenantId: actor.tenantId,
+          truckId: truck.id,
+          tripId: trip.id,
+          docType: doc.docType,
+          reason: overrideReason,
+          actorId: actor.id,
+        },
+      });
+      await appendLedger(tx, {
+        tenantId: actor.tenantId,
+        eventType: "document.override",
+        entityType: "document_override",
+        entityId: override.id,
+        actorId: actor.id,
+        payload: { truck: truck.regNo, trip: trip.number, docType: doc.docType, reason: overrideReason },
+      });
+    }
+  }
   await appendLedger(tx, {
     tenantId: actor.tenantId,
     eventType: "trip.created",

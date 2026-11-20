@@ -14,6 +14,7 @@ const NAV = [
   ["/workshop", "Workshop"],
   ["/billing", "Billing"],
   ["/evidence", "Evidence"],
+  ["/team", "Team"],
 ] as const;
 
 export const dynamic = "force-dynamic";

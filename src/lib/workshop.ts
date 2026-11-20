@@ -1,9 +1,10 @@
+import { can } from "./access";
 import type { Actor } from "./session";
 import type { Tx } from "./db";
 import { appendLedger } from "./ledger";
 
 export async function completeJob(tx: Tx, actor: Actor, jobId: string) {
-  if (actor.role !== "OWNER" && actor.role !== "MANAGER") {
+  if (!can(actor, "workshop.manage")) {
     return { ok: false as const, error: "Only the desk can close a job card" };
   }
   const job = await tx.workshopJob.findFirst({
