@@ -1,8 +1,10 @@
 import { notFound } from "next/navigation";
-import { advanceTripAction } from "@/app/(ops)/actions";
+import { advanceTripAction, deliveryFactsAction, settleTripAction } from "@/app/(ops)/actions";
 import { Flash, Pill, Plate } from "@/components/ui";
 import { withTenant } from "@/lib/db";
 import { inr, num, titleCase } from "@/lib/format";
+import { ewayWarning } from "@/lib/lifecycle";
+import { parseSettings } from "@/lib/settings";
 import { requireSession } from "@/lib/session";
 import { podMissing, polMissing } from "@/lib/trips";
 
@@ -26,8 +28,9 @@ export default async function TripPage({
   const session = await requireSession();
   const { id } = await params;
   const query = await searchParams;
-  const trip = await withTenant(session.tid, (tx) =>
-    tx.trip.findFirst({
+  const loaded = await withTenant(session.tid, async (tx) => {
+    const tenant = await tx.tenant.findUniqueOrThrow({ where: { id: session.tid } });
+    const trip = await tx.trip.findFirst({
       where: { id, tenantId: session.tid },
       include: {
         truck: true,
@@ -35,13 +38,25 @@ export default async function TripPage({
         customer: true,
         consignor: true,
         consignee: true,
+        stops: { orderBy: { seq: "asc" } },
+        settlement: true,
+        expenses: true,
         proofs: { include: { file: true }, orderBy: { createdAt: "asc" } },
       },
-    }),
-  );
+    });
+    const round = trip?.roundGroupId
+      ? await tx.trip.findMany({ where: { tenantId: session.tid, roundGroupId: trip.roundGroupId }, include: { fuels: true, expenses: true } })
+      : [];
+    return { trip, settings: parseSettings(tenant.settings), round };
+  });
+  const trip = loaded.trip;
   if (!trip) notFound();
   const pol = polMissing(trip);
   const pod = podMissing(trip);
+  const eway = ewayWarning(trip, loaded.settings);
+  const profit = loaded.round.length
+    ? loaded.round.reduce((sum, leg) => sum + num(leg.freight) - leg.fuels.filter((fill) => fill.status === "approved").reduce((inner, fill) => inner + num(fill.amount), 0) - leg.expenses.filter((claim) => claim.status === "approved").reduce((inner, claim) => inner + num(claim.payable), 0) - num(leg.commission), 0)
+    : null;
   const canDesk = session.role === "OWNER" || session.role === "MANAGER";
   return (
     <>
@@ -59,6 +74,7 @@ export default async function TripPage({
           </span>
         ))}
       </div>
+      {eway ? <p className="flash">{eway}</p> : null}
       <Flash message={query.error} />
       <div className="split section">
         <div className="stack">
@@ -72,7 +88,22 @@ export default async function TripPage({
             <p className="muted">
               Consignor {trip.consignor?.name ?? "—"} · Consignee {trip.consignee?.name ?? "—"} · Customer {trip.customer?.name ?? "—"}
             </p>
-            <p>Seal {trip.sealNumber ?? "not set"}</p>
+            <p>
+              Seal {trip.sealNumber ?? "not set"}
+              {trip.podSealNumber ? ` · delivery seal ${trip.podSealNumber}` : ""}
+              {trip.ewayBillNo ? ` · e-way ${trip.ewayBillNo}` : ""}
+              {trip.tripType !== "SINGLE" ? ` · ${trip.tripType.toLowerCase()} ${trip.leg ?? ""}` : ""}
+            </p>
+            {profit != null ? <p>Round-trip profit {inr(profit)}</p> : null}
+            {trip.stops.length > 0 ? (
+              <ul>
+                {trip.stops.map((stop) => (
+                  <li key={stop.id}>
+                    {stop.seq}. {stop.kind.toLowerCase()} {stop.place} · {stop.lrNumber}
+                  </li>
+                ))}
+              </ul>
+            ) : null}
             <p>
               <a className="btn secondary" href={`/api/trips/${trip.id}/lr`}>
                 LR PDF
@@ -84,14 +115,14 @@ export default async function TripPage({
           </article>
           <article className="panel">
             <h2>Proof of loading</h2>
-            {["seal number", "load photo", "weighbridge slip"].map((item) => (
+            {["seal number", "load photo", "seal photo", "weighbridge slip", "consignor OTP or signature"].map((item) => (
               <div key={item} className="check">
                 <span>{item}</span>
                 <Pill tone={pol.includes(item) ? "warn" : "ok"}>{pol.includes(item) ? "Needed" : "Filed"}</Pill>
               </div>
             ))}
             <h2 style={{ marginTop: 16 }}>Proof of delivery</h2>
-            {["consignee OTP", "signature"].map((item) => (
+            {["seal-intact photo", "unloaded goods photo", "unloading weighbridge", "consignee OTP", "signature"].map((item) => (
               <div key={item} className="check">
                 <span>{item}</span>
                 <Pill tone={pod.includes(item) ? "warn" : "ok"}>{pod.includes(item) ? "Needed" : "Filed"}</Pill>
@@ -126,8 +157,46 @@ export default async function TripPage({
             <p className="muted">This trip is closed.</p>
           )}
           <p className="muted" style={{ marginTop: 12 }}>
-            Suresh files seal, load photo, and weighbridge on the phone. After you mark the trip in transit, the consignee OTP is printed in the server log and shown on his phone.
+            Close waits for the delivery proofs, a driver settlement, and no expense still pending. Settlement {trip.settlement ? inr(num(trip.settlement.amount)) : "not recorded"}.
           </p>
+          {canDesk ? (
+            <form action={settleTripAction} className="form" style={{ marginTop: 12 }}>
+              <input type="hidden" name="tripId" value={trip.id} />
+              <label>
+                Settlement ₹
+                <input name="amount" type="number" step="0.01" required />
+              </label>
+              <label>
+                Note
+                <input name="note" required />
+              </label>
+              <button className="btn secondary" type="submit">
+                Record settlement
+              </button>
+            </form>
+          ) : null}
+          <form action={deliveryFactsAction} className="form" style={{ marginTop: 12 }}>
+            <label>
+              Delivery seal
+              <input name="podSeal" defaultValue={trip.podSealNumber ?? ""} />
+            </label>
+            <label>
+              Load weight kg
+              <input name="loadWeightKg" type="number" defaultValue={trip.loadWeightKg ?? ""} />
+            </label>
+            <label>
+              Unload weight kg
+              <input name="unloadWeightKg" type="number" defaultValue={trip.unloadWeightKg ?? ""} />
+            </label>
+            <label>
+              Shortage note
+              <input name="shortageNote" defaultValue={trip.shortageNote ?? ""} />
+            </label>
+            <input type="hidden" name="tripId" value={trip.id} />
+            <button className="btn secondary" type="submit">
+              Save delivery facts
+            </button>
+          </form>
         </aside>
       </div>
     </>

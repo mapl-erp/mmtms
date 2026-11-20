@@ -17,6 +17,12 @@ async function wipe(tenantId: string) {
   await admin.$executeRawUnsafe(`ALTER TABLE ledger_events DISABLE TRIGGER ledger_no_mutation`);
   try {
     await admin.documentOverride.deleteMany({ where: { tenantId } });
+    await admin.expenseClaim.deleteMany({ where: { tenantId } });
+    await admin.settlement.deleteMany({ where: { tenantId } });
+    await admin.tripStop.deleteMany({ where: { tenantId } });
+    await admin.alert.deleteMany({ where: { tenantId } });
+    await admin.booking.deleteMany({ where: { tenantId } });
+    await admin.seriesCounter.deleteMany({ where: { tenantId } });
     await admin.proof.deleteMany({ where: { tenantId } });
     await admin.fuelFill.deleteMany({ where: { tenantId } });
     await admin.invoice.deleteMany({ where: { tenantId } });

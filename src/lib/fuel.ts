@@ -1,4 +1,5 @@
 import { can } from "./access";
+import { haversineMeters, theftNotes } from "./expenses";
 import type { Actor } from "./session";
 import type { Tx } from "./db";
 import { appendLedger } from "./ledger";
@@ -15,22 +16,54 @@ export async function recordFuel(
     odometer: number;
     station: string;
     method: "FLEET_CARD" | "OFFICE_UPI";
+    tankBefore?: number | null;
+    tankAfter?: number | null;
+    parkedDropLitres?: number | null;
+    pumpLat?: number | null;
+    pumpLng?: number | null;
+    driverLat?: number | null;
+    driverLng?: number | null;
   },
 ) {
-  if (actor.role === "DRIVER") return { ok: false as const, error: "Fuel is approved from the desk in this phase" };
+  if (!["FLEET_CARD", "OFFICE_UPI"].includes(input.method)) {
+    return { ok: false as const, error: "Fuel is paid by fleet card or office UPI" };
+  }
   const truck = await tx.truck.findFirst({ where: { id: input.truckId, tenantId: actor.tenantId } });
   if (!truck) return { ok: false as const, error: "Truck not found" };
   const tenant = await tx.tenant.findFirst({ where: { id: actor.tenantId } });
   const settings = parseSettings(tenant?.settings);
+  if (actor.role === "DRIVER") {
+    if (input.driverLat == null || input.driverLng == null || input.pumpLat == null || input.pumpLng == null) {
+      return { ok: false as const, error: "A driver fuel request needs the pump and the phone GPS" };
+    }
+    const distance = haversineMeters(
+      { lat: input.driverLat, lng: input.driverLng },
+      { lat: input.pumpLat, lng: input.pumpLng },
+    );
+    if (distance > settings.fuelPumpRadiusM) {
+      return { ok: false as const, error: "GPS is not at the pump" };
+    }
+  }
   const previous = await tx.fuelFill.findFirst({
     where: { tenantId: actor.tenantId, truckId: truck.id, status: "approved" },
     orderBy: { odometer: "desc" },
   });
   let kmpl: number | null = null;
   let flagged = false;
+  const notes = theftNotes({
+    litres: input.litres,
+    tankBefore: input.tankBefore,
+    tankAfter: input.tankAfter,
+    parkedDropLitres: input.parkedDropLitres,
+    dropLimit: settings.fuelDropLitres,
+  });
+  if (notes.length) flagged = true;
   if (previous && input.odometer > previous.odometer && input.litres > 0) {
     kmpl = (input.odometer - previous.odometer) / input.litres;
-    if (kmpl < Number(truck.expectedKmpl) * settings.kmplShortfallRatio) flagged = true;
+    if (kmpl < Number(truck.expectedKmpl) * settings.kmplShortfallRatio) {
+      flagged = true;
+      notes.push(`km/l ${kmpl.toFixed(2)} is short of ${Number(truck.expectedKmpl).toFixed(2)}`);
+    }
   }
   const fill = await tx.fuelFill.create({
     data: {
@@ -45,6 +78,12 @@ export async function recordFuel(
       status: "pending",
       kmpl: kmpl == null ? null : kmpl.toFixed(2),
       flagged,
+      tankBefore: input.tankBefore == null ? null : input.tankBefore.toFixed(2),
+      tankAfter: input.tankAfter == null ? null : input.tankAfter.toFixed(2),
+      pumpLat: input.pumpLat ?? null,
+      pumpLng: input.pumpLng ?? null,
+      theftNote: notes.join("; ") || null,
+      paid: false,
     },
   });
   await appendLedger(tx, {
@@ -61,6 +100,7 @@ export async function recordFuel(
       method: input.method,
       kmpl: kmpl == null ? null : kmpl.toFixed(2),
       flagged,
+      theft: notes,
     },
   });
   return { ok: true as const, data: fill };

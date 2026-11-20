@@ -113,7 +113,36 @@ export default async function TripsPage({ searchParams }: { searchParams: Promis
               Distance km
               <input name="distanceKm" type="number" step="1" min="0" />
             </label>
+            <label>
+              Source
+              <select name="source" defaultValue="OFFICE">
+                <option value="OFFICE">Office</option>
+                <option value="BROKER">Broker</option>
+                <option value="CONTRACT">Contract</option>
+                <option value="PORTAL">Portal</option>
+              </select>
+            </label>
+            <label>
+              E-way bill
+              <input name="ewayBillNo" placeholder="Customer’s e-way number" />
+            </label>
+            <label>
+              E-way valid until
+              <input name="ewayValidUntil" type="datetime-local" />
+            </label>
+            <label>
+              Broker commission ₹
+              <input name="commission" type="number" step="1" min="0" />
+            </label>
           </div>
+          <label>
+            Stops, one per line as Place|PICKUP or Place|DROP. Leave blank for a single lane. Each stop gets its own LR.
+            <textarea name="stops" rows={3} placeholder={"Pune|PICKUP\nNashik|DROP"} />
+          </label>
+          <label>
+            Return leg of trip
+            <input name="roundOfTripId" placeholder="Trip id of the outbound leg" />
+          </label>
           <label>
             Owner override reason
             <input name="overrideReason" placeholder="Only if a paper is expired" />

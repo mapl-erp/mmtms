@@ -5,7 +5,8 @@ export function middleware(request: NextRequest) {
   const token = request.cookies.get("mm_session")?.value;
   const headers = new Headers(request.headers);
   headers.set("x-pathname", pathname);
-  if (!token && pathname !== "/login" && pathname !== "/api/health") {
+  const open = pathname === "/login" || pathname === "/api/health" || pathname === "/portal" || pathname.startsWith("/api/portal");
+  if (!token && !open) {
     const login = new URL("/login", request.url);
     return NextResponse.redirect(login);
   }

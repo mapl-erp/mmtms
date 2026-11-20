@@ -6,6 +6,7 @@ import { appendLedger } from "./ledger";
 import { storeBytes } from "./files";
 import { round2 } from "./format";
 import { daysUntil } from "./settings";
+import { closureBlockers, nextFyLr } from "./lifecycle";
 
 const NEXT: Record<string, string> = {
   PLANNED: "LOADING",
@@ -17,6 +18,7 @@ const NEXT: Record<string, string> = {
 export type TripShape = {
   sealNumber: string | null;
   podOtpOk: boolean;
+  polOtpOk: boolean;
   proofs: { kind: string }[];
 };
 
@@ -25,13 +27,18 @@ export function polMissing(trip: TripShape): string[] {
   const missing: string[] = [];
   if (!trip.sealNumber) missing.push("seal number");
   if (!kinds.has("LOAD_PHOTO")) missing.push("load photo");
+  if (!kinds.has("SEAL_PHOTO")) missing.push("seal photo");
   if (!kinds.has("WEIGHBRIDGE_LOAD")) missing.push("weighbridge slip");
+  if (!trip.polOtpOk && !kinds.has("CONSIGNOR_SIGNATURE")) missing.push("consignor OTP or signature");
   return missing;
 }
 
 export function podMissing(trip: TripShape): string[] {
   const kinds = new Set(trip.proofs.map((proof) => proof.kind));
   const missing: string[] = [];
+  if (!kinds.has("SEAL_INTACT")) missing.push("seal-intact photo");
+  if (!kinds.has("UNLOAD_PHOTO")) missing.push("unloaded goods photo");
+  if (!kinds.has("WEIGHBRIDGE_UNLOAD")) missing.push("unloading weighbridge");
   if (!trip.podOtpOk) missing.push("consignee OTP");
   if (!kinds.has("SIGNATURE")) missing.push("signature");
   return missing;
@@ -58,7 +65,7 @@ async function nextCode(tx: Tx, tenantId: string, kind: "trip" | "lr") {
   }
   const next = max + 1;
   if (kind === "trip") return `TRP-${next}`;
-  return `MM-${String(next).padStart(4, "0")}`;
+  return nextFyLr(tx, tenantId);
 }
 
 export function makeOtp(): string {
@@ -83,6 +90,14 @@ export async function createTrip(
     rate: number;
     distanceKm?: number | null;
     overrideReason?: string | null;
+    tripType?: "SINGLE" | "MULTI" | "ROUND";
+    source?: "OFFICE" | "BROKER" | "CONTRACT" | "PORTAL";
+    stops?: { kind: "PICKUP" | "DROP"; place: string; goods?: string }[];
+    roundOfTripId?: string | null;
+    brokerPartyId?: string | null;
+    commission?: number | null;
+    ewayBillNo?: string | null;
+    ewayValidUntil?: string | null;
   },
 ) {
   const denied = assertDesk(actor);
@@ -115,7 +130,19 @@ export async function createTrip(
   }
   freight = round2(freight);
   const number = input.number ?? (await nextCode(tx, actor.tenantId, "trip"));
-  const lrNumber = await nextCode(tx, actor.tenantId, "lr");
+  const stops = input.stops?.filter((stop) => stop.place.trim()) ?? [];
+  const lrNumber = stops.length > 1 ? await nextFyLr(tx, actor.tenantId) : await nextCode(tx, actor.tenantId, "lr");
+  let roundGroupId: string | null = null;
+  let leg: string | null = null;
+  if (input.roundOfTripId) {
+    const outbound = await tx.trip.findFirst({ where: { id: input.roundOfTripId, tenantId: actor.tenantId } });
+    if (!outbound) return { ok: false as const, error: "The outbound trip was not found" };
+    roundGroupId = outbound.roundGroupId ?? outbound.id;
+    leg = "RETURN";
+    if (!outbound.roundGroupId) {
+      await tx.trip.update({ where: { id: outbound.id }, data: { roundGroupId, leg: outbound.leg ?? "OUTBOUND" } });
+    }
+  }
   const trip = await tx.trip.create({
     data: {
       tenantId: actor.tenantId,
@@ -134,8 +161,34 @@ export async function createTrip(
       rate: input.rate.toFixed(2),
       freight: freight.toFixed(2),
       lrNumber,
+      tripType: stops.length > 1 ? "MULTI" : input.roundOfTripId ? "ROUND" : (input.tripType ?? "SINGLE"),
+      source: input.source ?? "OFFICE",
+      roundGroupId,
+      leg,
+      brokerPartyId: input.brokerPartyId || null,
+      commission: input.commission == null ? null : input.commission.toFixed(2),
+      ewayBillNo: input.ewayBillNo?.trim() || null,
+      ewayValidUntil: input.ewayValidUntil ? new Date(input.ewayValidUntil) : null,
+      distanceKm: input.distanceKm ?? null,
     },
   });
+  if (stops.length > 0) {
+    for (let index = 0; index < stops.length; index += 1) {
+      const stop = stops[index];
+      const stopLr = index === 0 ? lrNumber : await nextFyLr(tx, actor.tenantId);
+      await tx.tripStop.create({
+        data: {
+          tenantId: actor.tenantId,
+          tripId: trip.id,
+          seq: index + 1,
+          kind: stop.kind,
+          place: stop.place.trim(),
+          goods: stop.goods?.trim() || input.goods,
+          lrNumber: stopLr,
+        },
+      });
+    }
+  }
   if (expired.length) {
     for (const doc of expired) {
       const override = await tx.documentOverride.create({
@@ -246,6 +299,7 @@ export async function addProof(
     "UNLOAD_PHOTO",
     "SEAL_INTACT",
     "SIGNATURE",
+    "CONSIGNOR_SIGNATURE",
   ]);
   if (!allowed.has(input.kind)) return { ok: false as const, error: "Unknown proof kind" };
   if (input.capture !== "camera" && input.capture !== "stamped_still") {
@@ -303,6 +357,10 @@ export async function advanceTrip(tx: Tx, actor: Actor, tripId: string) {
   if (to === "DELIVERED") {
     const missing = podMissing(trip);
     if (missing.length) return { ok: false as const, error: `Proof of delivery still needs ${missing.join(", ")}` };
+  }
+  if (to === "CLOSED") {
+    const blocks = await closureBlockers(tx, actor.tenantId, trip);
+    if (blocks.length) return { ok: false as const, error: `Trip stays open until ${blocks.join(", ")}` };
   }
   const podOtp = to === "IN_TRANSIT" ? makeOtp() : trip.podOtp;
   await tx.trip.update({

@@ -5,9 +5,11 @@ import { loadActor } from "@/lib/access";
 import { withTenant } from "@/lib/db";
 import { createInvoice, type GstMode } from "@/lib/billing";
 import { registerDocument } from "@/lib/fleet";
+import { decideClaim, saveThresholds, submitClaim } from "@/lib/expenses";
 import { decideFuel, recordFuel } from "@/lib/fuel";
 import { saveDriverProfile, saveParty, savePermissionOverrides, saveTruckOwnership } from "@/lib/people";
 import { requireSession } from "@/lib/session";
+import { recordDeliveryFacts, recordSettlement } from "@/lib/lifecycle";
 import { advanceTrip, createTrip } from "@/lib/trips";
 import { completeJob } from "@/lib/workshop";
 
@@ -32,6 +34,22 @@ export async function createTripAction(formData: FormData) {
       rate: Number(formData.get("rate") ?? 0),
       distanceKm: formData.get("distanceKm") ? Number(formData.get("distanceKm")) : null,
       overrideReason: String(formData.get("overrideReason") ?? ""),
+      source: String(formData.get("source") ?? "OFFICE") as "OFFICE" | "BROKER" | "CONTRACT" | "PORTAL",
+      roundOfTripId: String(formData.get("roundOfTripId") ?? "") || null,
+      brokerPartyId: String(formData.get("brokerPartyId") ?? "") || null,
+      commission: formData.get("commission") ? Number(formData.get("commission")) : null,
+      ewayBillNo: String(formData.get("ewayBillNo") ?? ""),
+      ewayValidUntil: String(formData.get("ewayValidUntil") ?? "") || null,
+      stops: String(formData.get("stops") ?? "")
+        .split("\n")
+        .map((line) => {
+          const [place, kind] = line.split("|");
+          return {
+            place: (place ?? "").trim(),
+            kind: (kind ?? "DROP").trim().toUpperCase() === "PICKUP" ? ("PICKUP" as const) : ("DROP" as const),
+          };
+        })
+        .filter((stop) => stop.place),
     }),
   );
   if (!result.ok) back("/trips", result.error);
@@ -101,6 +119,76 @@ export async function completeJobAction(formData: FormData) {
     completeJob(tx, await loadActor(tx, session), String(formData.get("jobId") ?? "")),
   );
   back("/workshop", result.ok ? undefined : result.error);
+}
+
+export async function settleTripAction(formData: FormData) {
+  const session = await requireSession();
+  const id = String(formData.get("tripId") ?? "");
+  const result = await withTenant(session.tid, async (tx) =>
+    recordSettlement(tx, await loadActor(tx, session), id, Number(formData.get("amount") ?? 0), String(formData.get("note") ?? "")),
+  );
+  back(`/trips/${id}`, result.ok ? undefined : result.error);
+}
+
+export async function deliveryFactsAction(formData: FormData) {
+  const session = await requireSession();
+  const id = String(formData.get("tripId") ?? "");
+  const result = await withTenant(session.tid, async (tx) =>
+    recordDeliveryFacts(tx, await loadActor(tx, session), id, {
+      podSeal: String(formData.get("podSeal") ?? ""),
+      loadWeightKg: formData.get("loadWeightKg") ? Number(formData.get("loadWeightKg")) : null,
+      unloadWeightKg: formData.get("unloadWeightKg") ? Number(formData.get("unloadWeightKg")) : null,
+      shortageNote: String(formData.get("shortageNote") ?? ""),
+    }),
+  );
+  back(`/trips/${id}`, result.ok ? undefined : result.error);
+}
+
+export async function submitClaimAction(formData: FormData) {
+  const session = await requireSession();
+  const result = await withTenant(session.tid, async (tx) =>
+    submitClaim(tx, await loadActor(tx, session), {
+      driverId: String(formData.get("driverId") ?? ""),
+      tripId: String(formData.get("tripId") ?? "") || null,
+      category: String(formData.get("category") ?? "TOLL") as "TOLL" | "LABOUR" | "FOOD" | "PARKING" | "REPAIR" | "FINE",
+      amount: Number(formData.get("amount") ?? 0),
+      claimedOn: String(formData.get("claimedOn") ?? ""),
+      note: String(formData.get("note") ?? ""),
+      lat: formData.get("lat") ? Number(formData.get("lat")) : null,
+      lng: formData.get("lng") ? Number(formData.get("lng")) : null,
+    }),
+  );
+  back("/expenses", result.ok ? undefined : result.error);
+}
+
+export async function decideClaimAction(formData: FormData) {
+  const session = await requireSession();
+  const result = await withTenant(session.tid, async (tx) =>
+    decideClaim(
+      tx,
+      await loadActor(tx, session),
+      String(formData.get("claimId") ?? ""),
+      String(formData.get("decision") ?? "") as "approved" | "rejected",
+    ),
+  );
+  back("/expenses", result.ok ? undefined : result.error);
+}
+
+export async function saveThresholdsAction(formData: FormData) {
+  const session = await requireSession();
+  const result = await withTenant(session.tid, async (tx) =>
+    saveThresholds(tx, await loadActor(tx, session), {
+      overspeedKmh: Number(formData.get("overspeedKmh") ?? 70),
+      unplannedStopMin: Number(formData.get("unplannedStopMin") ?? 60),
+      foodDailyCapInr: Number(formData.get("foodDailyCapInr") ?? 400),
+      ownerApprovalAboveInr: Number(formData.get("ownerApprovalAboveInr") ?? 5000),
+      fuelDropLitres: Number(formData.get("fuelDropLitres") ?? 15),
+      kmplShortfallRatio: Number(formData.get("kmplShortfallRatio") ?? 0.85),
+      weightShortageKg: Number(formData.get("weightShortageKg") ?? 50),
+      ewayWarnHours: Number(formData.get("ewayWarnHours") ?? 8),
+    }),
+  );
+  back("/alerts", result.ok ? undefined : result.error);
 }
 
 export async function previewTamperAction() {

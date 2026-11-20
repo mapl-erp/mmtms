@@ -5,6 +5,7 @@ import { appendLedger } from "../src/lib/ledger";
 import { hashPassword } from "../src/lib/password";
 import { DEFAULT_SETTINGS } from "../src/lib/settings";
 import type { Actor } from "../src/lib/session";
+import { recordSettlement } from "../src/lib/lifecycle";
 import { addProof, advanceTrip, createTrip, setSeal, verifyPodOtp } from "../src/lib/trips";
 import { decideFuel, recordFuel } from "../src/lib/fuel";
 import { createInvoice } from "../src/lib/billing";
@@ -36,6 +37,12 @@ async function wipe(client: PrismaClient, tenantId: string) {
   await client.$executeRawUnsafe(`ALTER TABLE ledger_events DISABLE TRIGGER ledger_no_mutation`);
   try {
     await client.documentOverride.deleteMany({ where: { tenantId } });
+    await client.expenseClaim.deleteMany({ where: { tenantId } });
+    await client.settlement.deleteMany({ where: { tenantId } });
+    await client.tripStop.deleteMany({ where: { tenantId } });
+    await client.alert.deleteMany({ where: { tenantId } });
+    await client.booking.deleteMany({ where: { tenantId } });
+    await client.seriesCounter.deleteMany({ where: { tenantId } });
     await client.proof.deleteMany({ where: { tenantId } });
     await client.fuelFill.deleteMany({ where: { tenantId } });
     await client.invoice.deleteMany({ where: { tenantId } });
@@ -380,7 +387,7 @@ async function main() {
       if (input.through === "LOADING") return id;
       const sealed = await setSeal(tx, actor, id, input.seal ?? "SL-0000");
       if (!sealed.ok) throw new Error(sealed.error);
-      for (const kind of ["LOAD_PHOTO", "WEIGHBRIDGE_LOAD", "SEAL_PHOTO"] as const) {
+      for (const kind of ["LOAD_PHOTO", "WEIGHBRIDGE_LOAD", "SEAL_PHOTO", "CONSIGNOR_SIGNATURE"] as const) {
         const proof = await addProof(tx, actor, {
           tripId: id,
           kind,
@@ -397,16 +404,20 @@ async function main() {
       const fresh = await tx.trip.findFirstOrThrow({ where: { id } });
       const otp = await verifyPodOtp(tx, actor, id, fresh.podOtp ?? "");
       if (!otp.ok) throw new Error(otp.error);
-      const signature = await addProof(tx, actor, {
-        tripId: id,
-        kind: "SIGNATURE",
-        bytes: labeledSvg("Consignee signature", input.number),
-        mime: "image/svg+xml",
-        capture: "stamped_still",
-      });
-      if (!signature.ok) throw new Error(signature.error);
+      for (const kind of ["SEAL_INTACT", "UNLOAD_PHOTO", "WEIGHBRIDGE_UNLOAD", "SIGNATURE"] as const) {
+        const proof = await addProof(tx, actor, {
+          tripId: id,
+          kind,
+          bytes: labeledSvg(kind.replaceAll("_", " "), input.number),
+          mime: "image/svg+xml",
+          capture: "stamped_still",
+        });
+        if (!proof.ok) throw new Error(proof.error);
+      }
       const delivered = await advanceTrip(tx, actor, id);
       if (!delivered.ok) throw new Error(delivered.error);
+      const settled = await recordSettlement(tx, actor, id, 1500, "Food and toll balance cleared");
+      if (!settled.ok) throw new Error(settled.error);
       const closed = await advanceTrip(tx, actor, id);
       if (!closed.ok) throw new Error(closed.error);
       return id;
@@ -427,7 +438,7 @@ async function main() {
       seal: "SL-2201",
       through: "CLOSED",
     });
-    await runTrip({
+    const transitId = await runTrip({
       number: "TRP-1003",
       truckId: benz.id,
       driverId: ramesh.id,
@@ -441,6 +452,14 @@ async function main() {
       rate: 91000,
       seal: "SL-4412",
       through: "IN_TRANSIT",
+    });
+    await tx.trip.update({
+      where: { id: transitId },
+      data: {
+        ewayBillNo: "311008877665",
+        ewayValidUntil: new Date(Date.now() + 5 * 60 * 60 * 1000),
+        loadWeightKg: 31800,
+      },
     });
     await runTrip({
       number: "TRP-1004",

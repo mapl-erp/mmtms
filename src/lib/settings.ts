@@ -17,6 +17,7 @@ export type TenantSettings = {
   gstRate: number;
   dutyStartHour: number;
   dutyEndHour: number;
+  fuelPumpRadiusM: number;
 };
 
 export const DEFAULT_SETTINGS: TenantSettings = {
@@ -38,6 +39,7 @@ export const DEFAULT_SETTINGS: TenantSettings = {
   gstRate: 0.18,
   dutyStartHour: 5,
   dutyEndHour: 22,
+  fuelPumpRadiusM: 400,
 };
 
 export function parseSettings(raw: unknown): TenantSettings {

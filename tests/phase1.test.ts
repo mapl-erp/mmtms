@@ -7,6 +7,7 @@ import { storeBytes } from "@/lib/files";
 import { appendLedger, chainHash } from "@/lib/ledger";
 import type { Actor } from "@/lib/session";
 import { DEFAULT_SETTINGS } from "@/lib/settings";
+import { financialYear } from "@/lib/lifecycle";
 import { addProof, advanceTrip, createTrip, setSeal } from "@/lib/trips";
 import { uploadPath, verifyTenant } from "@/lib/verify";
 
@@ -16,6 +17,12 @@ async function wipe(tenantId: string) {
   await admin.$executeRawUnsafe(`ALTER TABLE ledger_events DISABLE TRIGGER ledger_no_mutation`);
   try {
     await admin.documentOverride.deleteMany({ where: { tenantId } });
+    await admin.expenseClaim.deleteMany({ where: { tenantId } });
+    await admin.settlement.deleteMany({ where: { tenantId } });
+    await admin.tripStop.deleteMany({ where: { tenantId } });
+    await admin.alert.deleteMany({ where: { tenantId } });
+    await admin.booking.deleteMany({ where: { tenantId } });
+    await admin.seriesCounter.deleteMany({ where: { tenantId } });
     await admin.proof.deleteMany({ where: { tenantId } });
     await admin.fuelFill.deleteMany({ where: { tenantId } });
     await admin.invoice.deleteMany({ where: { tenantId } });
@@ -294,7 +301,7 @@ describe("phase 1 ledger, tenancy, and trips", () => {
       );
       expect(created.ok).toBe(true);
       if (!created.ok) return;
-      expect(created.data.lrNumber).toBe("MM-0001");
+      expect(created.data.lrNumber).toBe(`MM/${financialYear()}/0001`);
       const loading = await withTenant(tenant.id, (tx) => advanceTrip(tx, actor, created.data.id));
       expect(loading.ok).toBe(true);
       const blocked = await withTenant(tenant.id, (tx) => advanceTrip(tx, actor, created.data.id));
@@ -302,7 +309,7 @@ describe("phase 1 ledger, tenancy, and trips", () => {
       await withTenant(tenant.id, async (tx) => {
         const sealed = await setSeal(tx, actor, created.data.id, "SL-100");
         expect(sealed.ok).toBe(true);
-        for (const kind of ["LOAD_PHOTO", "WEIGHBRIDGE_LOAD"]) {
+        for (const kind of ["LOAD_PHOTO", "WEIGHBRIDGE_LOAD", "SEAL_PHOTO", "CONSIGNOR_SIGNATURE"]) {
           const proof = await addProof(tx, actor, {
             tripId: created.data.id,
             kind,
@@ -357,8 +364,8 @@ describe("phase 1 ledger, tenancy, and trips", () => {
           distanceKm: 210,
         }),
       );
-      expect(a.ok && a.data.lrNumber).toBe("MM-0001");
-      expect(b.ok && b.data.lrNumber).toBe("MM-0001");
+      expect(a.ok && a.data.lrNumber).toBe(`MM/${financialYear()}/0001`);
+      expect(b.ok && b.data.lrNumber).toBe(`MM/${financialYear()}/0001`);
       expect(a.ok && b.ok && a.data.tenantId).not.toBe(b.data.tenantId);
     } finally {
       await wipe(first.tenant.id);

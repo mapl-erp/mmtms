@@ -322,6 +322,18 @@ export function DriverConsole({ trip, driverName }: { trip: Trip | null; driverN
               <button className="btn secondary" type="button" onClick={() => void shutter("SEAL_PHOTO")}>
                 Seal photo
               </button>
+              <button className="btn secondary" type="button" onClick={() => void shutter("CONSIGNOR_SIGNATURE")}>
+                Consignor signature
+              </button>
+              <button className="btn secondary" type="button" onClick={() => void shutter("SEAL_INTACT")}>
+                Seal intact at delivery
+              </button>
+              <button className="btn secondary" type="button" onClick={() => void shutter("UNLOAD_PHOTO")}>
+                Unloaded goods
+              </button>
+              <button className="btn secondary" type="button" onClick={() => void shutter("WEIGHBRIDGE_UNLOAD")}>
+                Unloading weighbridge
+              </button>
             </section>
             <section className="capture">
               <strong>Already on this trip</strong>

@@ -23,7 +23,12 @@ export default async function DeskPage() {
       orderBy: { number: "desc" },
     });
     const flagged = await tx.fuelFill.count({ where: { tenantId: session.tid, flagged: true } });
-    return { settings: parseSettings(tenant.settings), trucks, trips, flagged };
+    const alertsLive = await tx.alert.findMany({
+      where: { tenantId: session.tid, acknowledgedAt: null },
+      orderBy: { createdAt: "desc" },
+      take: 6,
+    });
+    return { settings: parseSettings(tenant.settings), trucks, trips, flagged, alertsLive };
   });
   const alerts = data.trucks.flatMap((truck) =>
     truck.documents.flatMap((doc) => {
@@ -62,6 +67,15 @@ export default async function DeskPage() {
           </div>
         </div>
       </div>
+      {data.alertsLive.length > 0 ? (
+        <ul className="alerts">
+          {data.alertsLive.map((alert) => (
+            <li key={alert.id} className="bad">
+              {alert.message}
+            </li>
+          ))}
+        </ul>
+      ) : null}
       {alerts.length > 0 ? (
         <ul className="alerts">
           {alerts.map((alert) => (

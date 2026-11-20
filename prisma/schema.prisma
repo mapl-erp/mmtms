@@ -29,8 +29,17 @@ model Tenant {
   jobs        WorkshopJob[]
   tyres       Tyre[]
   invoices    Invoice[]
-  quotes      Quote[]
-  assignments Assignment[]
+  quotes       Quote[]
+  assignments  Assignment[]
+  stops        TripStop[]
+  counters     SeriesCounter[]
+  settlements  Settlement[]
+  expenses     ExpenseClaim[]
+  alerts       Alert[]
+  alertRules   AlertRule[]
+  bookings     Booking[]
+  attendance   Attendance[]
+  adjustments  PayrollAdjustment[]
 
   @@map("tenants")
 }
@@ -164,6 +173,7 @@ model Party {
   customerTrips  Trip[]    @relation("TripCustomer")
   consignorTrips Trip[]    @relation("TripConsignor")
   consigneeTrips Trip[]    @relation("TripConsignee")
+  brokerTrips    Trip[]    @relation("TripBroker")
 
   @@index([tenantId])
   @@map("parties")
@@ -207,10 +217,23 @@ model Trip {
   sealNumber  String?   @map("seal_number")
   polOtp      String?   @map("pol_otp")
   podOtp      String?   @map("pod_otp")
-  polOtpOk    Boolean   @default(false) @map("pol_otp_ok")
-  podOtpOk    Boolean   @default(false) @map("pod_otp_ok")
-  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
-  startedAt   DateTime? @map("started_at") @db.Timestamptz(3)
+  polOtpOk       Boolean   @default(false) @map("pol_otp_ok")
+  podOtpOk       Boolean   @default(false) @map("pod_otp_ok")
+  tripType       String    @default("SINGLE") @map("trip_type")
+  source         String    @default("OFFICE")
+  roundGroupId   String?   @map("round_group_id") @db.Uuid
+  leg            String?
+  brokerPartyId  String?   @map("broker_party_id") @db.Uuid
+  commission     Decimal?  @db.Decimal(12, 2)
+  ewayBillNo     String?   @map("eway_bill_no")
+  ewayValidUntil DateTime? @map("eway_valid_until") @db.Timestamptz(3)
+  distanceKm     Int?      @map("distance_km")
+  podSealNumber  String?   @map("pod_seal_number")
+  loadWeightKg   Int?      @map("load_weight_kg")
+  unloadWeightKg Int?      @map("unload_weight_kg")
+  shortageNote   String?   @map("shortage_note")
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  startedAt      DateTime? @map("started_at") @db.Timestamptz(3)
 
   tenant      Tenant       @relation(fields: [tenantId], references: [id])
   truck       Truck        @relation(fields: [truckId], references: [id])
@@ -218,6 +241,10 @@ model Trip {
   customer    Party?       @relation("TripCustomer", fields: [customerId], references: [id])
   consignor   Party?       @relation("TripConsignor", fields: [consignorId], references: [id])
   consignee   Party?       @relation("TripConsignee", fields: [consigneeId], references: [id])
+  broker      Party?       @relation("TripBroker", fields: [brokerPartyId], references: [id])
+  stops       TripStop[]
+  settlement  Settlement?
+  expenses    ExpenseClaim[]
   proofs      Proof[]
   fuels       FuelFill[]
   invoices    Invoice[]
@@ -281,8 +308,14 @@ model FuelFill {
   method    String
   status    String
   kmpl      Decimal? @db.Decimal(6, 2)
-  flagged   Boolean  @default(false)
-  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  flagged    Boolean  @default(false)
+  tankBefore Decimal? @map("tank_before") @db.Decimal(10, 2)
+  tankAfter  Decimal? @map("tank_after") @db.Decimal(10, 2)
+  pumpLat    Float?   @map("pump_lat")
+  pumpLng    Float?   @map("pump_lng")
+  theftNote  String?  @map("theft_note")
+  paid       Boolean  @default(false)
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
 
   tenant Tenant @relation(fields: [tenantId], references: [id])
   truck  Truck  @relation(fields: [truckId], references: [id])
@@ -364,6 +397,163 @@ model Assignment {
 
   @@index([tenantId])
   @@map("assignments")
+}
+
+model TripStop {
+  id             String  @id @default(uuid()) @db.Uuid
+  tenantId       String  @map("tenant_id") @db.Uuid
+  tripId         String  @map("trip_id") @db.Uuid
+  seq            Int
+  kind           String
+  partyId        String? @map("party_id") @db.Uuid
+  place          String
+  goods          String?
+  lrNumber       String? @map("lr_number")
+  sealNumber     String? @map("seal_number")
+  polDone        Boolean @default(false) @map("pol_done")
+  podDone        Boolean @default(false) @map("pod_done")
+  loadWeightKg   Int?    @map("load_weight_kg")
+  unloadWeightKg Int?    @map("unload_weight_kg")
+  shortageNote   String? @map("shortage_note")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+  trip   Trip   @relation(fields: [tripId], references: [id])
+
+  @@unique([tenantId, lrNumber])
+  @@index([tenantId])
+  @@index([tripId])
+  @@map("trip_stops")
+}
+
+model SeriesCounter {
+  tenantId String @map("tenant_id") @db.Uuid
+  series   String
+  value    Int    @default(0)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@id([tenantId, series])
+  @@map("series_counters")
+}
+
+model Settlement {
+  id        String   @id @default(uuid()) @db.Uuid
+  tenantId  String   @map("tenant_id") @db.Uuid
+  tripId    String   @unique @map("trip_id") @db.Uuid
+  amount    Decimal  @db.Decimal(12, 2)
+  note      String?
+  settledAt DateTime @default(now()) @map("settled_at") @db.Timestamptz(3)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+  trip   Trip   @relation(fields: [tripId], references: [id])
+
+  @@index([tenantId])
+  @@map("settlements")
+}
+
+model ExpenseClaim {
+  id         String   @id @default(uuid()) @db.Uuid
+  tenantId   String   @map("tenant_id") @db.Uuid
+  tripId     String?  @map("trip_id") @db.Uuid
+  driverId   String   @map("driver_id") @db.Uuid
+  category   String
+  amount     Decimal  @db.Decimal(12, 2)
+  payable    Decimal  @db.Decimal(12, 2)
+  status     String
+  note       String?
+  claimedOn  DateTime @map("claimed_on") @db.Date
+  lat        Float?
+  lng        Float?
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+  trip   Trip?  @relation(fields: [tripId], references: [id])
+
+  @@index([tenantId])
+  @@map("expense_claims")
+}
+
+model Alert {
+  id           String    @id @default(uuid()) @db.Uuid
+  tenantId     String    @map("tenant_id") @db.Uuid
+  rule         String
+  severity     String
+  message      String
+  entityType   String    @map("entity_type")
+  entityId     String    @map("entity_id")
+  recipients   String[]
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  acknowledgedAt DateTime? @map("acknowledged_at") @db.Timestamptz(3)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@index([tenantId])
+  @@map("alerts")
+}
+
+model Attendance {
+  id       String   @id @default(uuid()) @db.Uuid
+  tenantId String   @map("tenant_id") @db.Uuid
+  driverId String   @map("driver_id") @db.Uuid
+  day      DateTime @db.Date
+  status   String
+  source   String
+  note     String?
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@unique([tenantId, driverId, day])
+  @@index([tenantId])
+  @@map("attendance")
+}
+
+model PayrollAdjustment {
+  id       String   @id @default(uuid()) @db.Uuid
+  tenantId String   @map("tenant_id") @db.Uuid
+  driverId String   @map("driver_id") @db.Uuid
+  month    String
+  kind     String
+  amount   Decimal  @db.Decimal(12, 2)
+  note     String?
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@index([tenantId])
+  @@map("payroll_adjustments")
+}
+
+model AlertRule {
+  id          String  @id @default(uuid()) @db.Uuid
+  tenantId    String  @map("tenant_id") @db.Uuid
+  key         String
+  enabled     Boolean @default(true)
+  threshold   Json    @default("{}")
+  notifyRoles String[] @map("notify_roles")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@unique([tenantId, key])
+  @@index([tenantId])
+  @@map("alert_rules")
+}
+
+model Booking {
+  id          String   @id @default(uuid()) @db.Uuid
+  tenantId    String   @map("tenant_id") @db.Uuid
+  partyName   String   @map("party_name")
+  phone       String
+  origin      String
+  destination String
+  goods       String
+  weightTons  Decimal  @map("weight_tons") @db.Decimal(10, 2)
+  status      String   @default("REQUESTED")
+  tripId      String?  @map("trip_id") @db.Uuid
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@index([tenantId])
+  @@map("bookings")
 }
 
 model Branch {

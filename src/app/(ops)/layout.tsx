@@ -11,10 +11,13 @@ const NAV = [
   ["/trips", "Trips"],
   ["/map", "Map"],
   ["/fuel", "Fuel"],
+  ["/expenses", "Expenses"],
+  ["/alerts", "Alerts"],
   ["/workshop", "Workshop"],
   ["/billing", "Billing"],
   ["/evidence", "Evidence"],
   ["/team", "Team"],
+  ["/portal", "Portal"],
 ] as const;
 
 export const dynamic = "force-dynamic";

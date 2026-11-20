@@ -54,7 +54,7 @@ export default async function FuelPage({ searchParams }: { searchParams: Promise
                     {fill.kmpl ? num(fill.kmpl).toFixed(2) : "—"}
                     {fill.flagged ? (
                       <div>
-                        <Pill tone="bad">Short of {num(fill.truck.expectedKmpl).toFixed(1)}</Pill>
+                        <Pill tone="bad">{fill.theftNote ?? `Short of ${num(fill.truck.expectedKmpl).toFixed(1)}`}</Pill>
                       </div>
                     ) : null}
                   </td>
