@@ -1,0 +1,810 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model Tenant {
+  id        String   @id @default(uuid()) @db.Uuid
+  slug      String   @unique
+  name      String
+  settings  Json     @default("{}")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  users       User[]
+  trucks      Truck[]
+  drivers     Driver[]
+  parties     Party[]
+  trips       Trip[]
+  branches    Branch[]
+  overrides   DocumentOverride[]
+  documents   TruckDocument[]
+  ledger      LedgerEvent[]
+  files       StoredFile[]
+  proofs      Proof[]
+  fuels       FuelFill[]
+  jobs        WorkshopJob[]
+  tyres       Tyre[]
+  invoices    Invoice[]
+  quotes       Quote[]
+  assignments  Assignment[]
+  stops        TripStop[]
+  counters     SeriesCounter[]
+  settlements  Settlement[]
+  expenses     ExpenseClaim[]
+  alerts       Alert[]
+  alertRules   AlertRule[]
+  payments     Payment[]
+  allocations  PaymentAllocation[]
+  purchases    Purchase[]
+  mails        OutboxMail[]
+  devices      Device[]
+  deviceLogs   DeviceLog[]
+  bookings     Booking[]
+  attendance   Attendance[]
+  adjustments  PayrollAdjustment[]
+  trackerStates TrackerState[]
+  breathTests  BreathTest[]
+  leaveRequests LeaveRequest[]
+  archives     ArchiveRecord[]
+
+  @@map("tenants")
+}
+
+model User {
+  id           String   @id @default(uuid()) @db.Uuid
+  tenantId     String   @map("tenant_id") @db.Uuid
+  email        String
+  passwordHash String   @map("password_hash")
+  name         String
+  role                  String
+  driverId              String?  @map("driver_id") @db.Uuid
+  branchId              String?  @map("branch_id") @db.Uuid
+  permissionOverrides   Json     @default("{}") @map("permission_overrides")
+  createdAt             DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  tenant Tenant  @relation(fields: [tenantId], references: [id])
+  driver Driver? @relation(fields: [driverId], references: [id])
+  branch Branch? @relation(fields: [branchId], references: [id])
+
+  @@unique([tenantId, email])
+  @@index([tenantId])
+  @@map("users")
+}
+
+model Driver {
+  id            String    @id @default(uuid()) @db.Uuid
+  tenantId      String    @map("tenant_id") @db.Uuid
+  name          String
+  phone         String
+  dlNumber      String    @map("dl_number")
+  dlExpiry      DateTime  @map("dl_expiry") @db.Date
+  badgeNumber   String?   @map("badge_number")
+  badgeExpiry   DateTime? @map("badge_expiry") @db.Date
+  monthlySalary      Decimal   @default(0) @map("monthly_salary") @db.Decimal(12, 2)
+  address            String?
+  aadhaarEnc         String?   @map("aadhaar_enc")
+  aadhaarLast4       String?   @map("aadhaar_last4")
+  panEnc             String?   @map("pan_enc")
+  panLast4           String?   @map("pan_last4")
+  bankAccountEnc     String?   @map("bank_account_enc")
+  bankLast4          String?   @map("bank_last4")
+  bankIfscEnc        String?   @map("bank_ifsc_enc")
+  policeVerification String?   @map("police_verification")
+  referenceNotes     String?   @map("reference_notes")
+  emergencyName      String?   @map("emergency_name")
+  emergencyPhone     String?   @map("emergency_phone")
+  medicalExpiry      DateTime? @map("medical_expiry") @db.Date
+  biometricConsentAt DateTime? @map("biometric_consent_at") @db.Timestamptz(3)
+  createdAt          DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  tenant      Tenant       @relation(fields: [tenantId], references: [id])
+  users       User[]
+  trips       Trip[]
+  assignments Assignment[]
+
+  @@index([tenantId])
+  @@map("drivers")
+}
+
+model Truck {
+  id           String   @id @default(uuid()) @db.Uuid
+  tenantId     String   @map("tenant_id") @db.Uuid
+  regNo        String   @map("reg_no")
+  make         String
+  model        String
+  capacityTons Decimal  @map("capacity_tons") @db.Decimal(6, 2)
+  wheels       Int
+  status       String
+  expectedKmpl    Decimal  @map("expected_kmpl") @db.Decimal(5, 2)
+  odometerKm      Int      @default(0) @map("odometer_km")
+  branchId        String?  @map("branch_id") @db.Uuid
+  ownershipType   String   @default("OWN") @map("ownership_type")
+  ownerPartyId    String?  @map("owner_party_id") @db.Uuid
+  hireTerms       String?  @map("hire_terms")
+  purchaseCost    Decimal? @map("purchase_cost") @db.Decimal(14, 2)
+  depreciationPct Decimal? @map("depreciation_pct") @db.Decimal(5, 2)
+  loanEmi         Decimal? @map("loan_emi") @db.Decimal(12, 2)
+  financer        String?
+  bodyType        String?  @map("body_type")
+  trailerDetails  String?  @map("trailer_details")
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  tenant      Tenant          @relation(fields: [tenantId], references: [id])
+  branch      Branch?         @relation(fields: [branchId], references: [id])
+  ownerParty  Party?          @relation("TruckOwner", fields: [ownerPartyId], references: [id])
+  overrides   DocumentOverride[]
+  documents   TruckDocument[]
+  trips       Trip[]
+  fuels       FuelFill[]
+  jobs        WorkshopJob[]
+  tyres       Tyre[]
+  assignments Assignment[]
+  devices     Device[]
+
+  @@unique([tenantId, regNo])
+  @@index([tenantId])
+  @@map("trucks")
+}
+
+model TruckDocument {
+  id        String   @id @default(uuid()) @db.Uuid
+  tenantId  String   @map("tenant_id") @db.Uuid
+  truckId   String   @map("truck_id") @db.Uuid
+  docType   String   @map("doc_type")
+  docNumber String   @map("doc_number")
+  expiresOn DateTime @map("expires_on") @db.Date
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+  truck  Truck  @relation(fields: [truckId], references: [id])
+
+  @@index([tenantId])
+  @@index([truckId])
+  @@map("truck_documents")
+}
+
+model Party {
+  id       String  @id @default(uuid()) @db.Uuid
+  tenantId String  @map("tenant_id") @db.Uuid
+  name     String
+  kind     String
+  tags     String[] @default([])
+  gstin    String?
+  pan      String?
+  phone    String?
+  city     String?
+
+  tenant         Tenant    @relation(fields: [tenantId], references: [id])
+  ownedTrucks    Truck[]   @relation("TruckOwner")
+  quotes         Quote[]
+  invoices       Invoice[]
+  payments       Payment[]
+  customerTrips  Trip[]    @relation("TripCustomer")
+  consignorTrips Trip[]    @relation("TripConsignor")
+  consigneeTrips Trip[]    @relation("TripConsignee")
+  brokerTrips    Trip[]    @relation("TripBroker")
+
+  @@index([tenantId])
+  @@map("parties")
+}
+
+model Quote {
+  id          String   @id @default(uuid()) @db.Uuid
+  tenantId    String   @map("tenant_id") @db.Uuid
+  partyId     String   @map("party_id") @db.Uuid
+  origin      String
+  destination String
+  amount      Decimal  @db.Decimal(12, 2)
+  note        String?
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+  party  Party  @relation(fields: [partyId], references: [id])
+
+  @@index([tenantId])
+  @@map("quotes")
+}
+
+model Trip {
+  id          String    @id @default(uuid()) @db.Uuid
+  tenantId    String    @map("tenant_id") @db.Uuid
+  number      String
+  status      String
+  truckId     String    @map("truck_id") @db.Uuid
+  driverId    String    @map("driver_id") @db.Uuid
+  customerId  String?   @map("customer_id") @db.Uuid
+  consignorId String?   @map("consignor_id") @db.Uuid
+  consigneeId String?   @map("consignee_id") @db.Uuid
+  origin      String
+  destination String
+  goods       String
+  weightTons  Decimal   @map("weight_tons") @db.Decimal(10, 2)
+  rateBasis   String    @map("rate_basis")
+  rate        Decimal   @db.Decimal(12, 2)
+  freight     Decimal   @db.Decimal(12, 2)
+  lrNumber    String?   @map("lr_number")
+  sealNumber  String?   @map("seal_number")
+  polOtp      String?   @map("pol_otp")
+  podOtp      String?   @map("pod_otp")
+  polOtpOk       Boolean   @default(false) @map("pol_otp_ok")
+  podOtpOk       Boolean   @default(false) @map("pod_otp_ok")
+  tripType       String    @default("SINGLE") @map("trip_type")
+  source         String    @default("OFFICE")
+  roundGroupId   String?   @map("round_group_id") @db.Uuid
+  leg            String?
+  brokerPartyId  String?   @map("broker_party_id") @db.Uuid
+  commission     Decimal?  @db.Decimal(12, 2)
+  ewayBillNo     String?   @map("eway_bill_no")
+  ewayValidUntil     DateTime? @map("eway_valid_until") @db.Timestamptz(3)
+  driveReminderSent  Boolean   @default(false) @map("drive_reminder_sent")
+  driveAlertSent     Boolean   @default(false) @map("drive_alert_sent")
+  distanceKm     Int?      @map("distance_km")
+  podSealNumber  String?   @map("pod_seal_number")
+  loadWeightKg   Int?      @map("load_weight_kg")
+  unloadWeightKg Int?      @map("unload_weight_kg")
+  shortageNote   String?   @map("shortage_note")
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  startedAt      DateTime? @map("started_at") @db.Timestamptz(3)
+
+  tenant      Tenant       @relation(fields: [tenantId], references: [id])
+  truck       Truck        @relation(fields: [truckId], references: [id])
+  driver      Driver       @relation(fields: [driverId], references: [id])
+  customer    Party?       @relation("TripCustomer", fields: [customerId], references: [id])
+  consignor   Party?       @relation("TripConsignor", fields: [consignorId], references: [id])
+  consignee   Party?       @relation("TripConsignee", fields: [consigneeId], references: [id])
+  broker      Party?       @relation("TripBroker", fields: [brokerPartyId], references: [id])
+  stops       TripStop[]
+  settlement  Settlement?
+  expenses    ExpenseClaim[]
+  breathTests BreathTest[]
+  proofs      Proof[]
+  fuels       FuelFill[]
+  invoices    Invoice[]
+  assignments Assignment[]
+  overrides   DocumentOverride[]
+
+  @@unique([tenantId, number])
+  @@unique([tenantId, lrNumber])
+  @@index([tenantId])
+  @@map("trips")
+}
+
+model Proof {
+  id        String   @id @default(uuid()) @db.Uuid
+  tenantId  String   @map("tenant_id") @db.Uuid
+  tripId    String   @map("trip_id") @db.Uuid
+  kind      String
+  fileId    String   @map("file_id") @db.Uuid
+  capture   String
+  note      String?
+  lat       Float?
+  lng       Float?
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  tenant Tenant     @relation(fields: [tenantId], references: [id])
+  trip   Trip       @relation(fields: [tripId], references: [id])
+  file   StoredFile @relation(fields: [fileId], references: [id])
+
+  @@index([tenantId])
+  @@index([tripId])
+  @@map("proofs")
+}
+
+model StoredFile {
+  id        String   @id @default(uuid()) @db.Uuid
+  tenantId  String   @map("tenant_id") @db.Uuid
+  sha256    String
+  bytes     Int
+  mime      String
+  label     String
+  path      String
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  tenant Tenant  @relation(fields: [tenantId], references: [id])
+  proofs Proof[]
+
+  @@index([tenantId])
+  @@index([tenantId, sha256])
+  @@map("stored_files")
+}
+
+model FuelFill {
+  id        String   @id @default(uuid()) @db.Uuid
+  tenantId  String   @map("tenant_id") @db.Uuid
+  truckId   String   @map("truck_id") @db.Uuid
+  tripId    String?  @map("trip_id") @db.Uuid
+  litres    Decimal  @db.Decimal(10, 2)
+  amount    Decimal  @db.Decimal(12, 2)
+  odometer  Int
+  station   String
+  method    String
+  status    String
+  kmpl      Decimal? @db.Decimal(6, 2)
+  flagged    Boolean  @default(false)
+  tankBefore Decimal? @map("tank_before") @db.Decimal(10, 2)
+  tankAfter  Decimal? @map("tank_after") @db.Decimal(10, 2)
+  pumpLat    Float?   @map("pump_lat")
+  pumpLng    Float?   @map("pump_lng")
+  theftNote  String?  @map("theft_note")
+  paid       Boolean  @default(false)
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+  truck  Truck  @relation(fields: [truckId], references: [id])
+  trip   Trip?  @relation(fields: [tripId], references: [id])
+
+  @@index([tenantId])
+  @@map("fuel_fills")
+}
+
+model WorkshopJob {
+  id       String    @id @default(uuid()) @db.Uuid
+  tenantId String    @map("tenant_id") @db.Uuid
+  truckId  String    @map("truck_id") @db.Uuid
+  title    String
+  dueOn    DateTime? @map("due_on") @db.Date
+  dueKm    Int?      @map("due_km")
+  status   String
+  cost     Decimal   @default(0) @db.Decimal(12, 2)
+  vendor   String?
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+  truck  Truck  @relation(fields: [truckId], references: [id])
+
+  @@index([tenantId])
+  @@map("workshop_jobs")
+}
+
+model Tyre {
+  id       String @id @default(uuid()) @db.Uuid
+  tenantId String @map("tenant_id") @db.Uuid
+  truckId  String @map("truck_id") @db.Uuid
+  serial   String
+  position String
+  kmRun       Int      @map("km_run")
+  pressureKpa Decimal? @map("pressure_kpa") @db.Decimal(8, 1)
+  tempC       Decimal? @map("temp_c") @db.Decimal(5, 1)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+  truck  Truck  @relation(fields: [truckId], references: [id])
+
+  @@index([tenantId])
+  @@map("tyres")
+}
+
+model Invoice {
+  id          String   @id @default(uuid()) @db.Uuid
+  tenantId    String   @map("tenant_id") @db.Uuid
+  number      String
+  tripId      String?  @map("trip_id") @db.Uuid
+  partyId     String   @map("party_id") @db.Uuid
+  taxable     Decimal  @db.Decimal(12, 2)
+  gstMode     String   @map("gst_mode")
+  gstRate     Decimal  @map("gst_rate") @db.Decimal(5, 2)
+  gstAmount   Decimal  @map("gst_amount") @db.Decimal(12, 2)
+  total       Decimal  @db.Decimal(12, 2)
+  itcEligible Boolean  @map("itc_eligible")
+  externalId  String?  @map("external_id")
+  booksMode   String?  @map("books_mode")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+  trip        Trip?               @relation(fields: [tripId], references: [id])
+  party       Party               @relation(fields: [partyId], references: [id])
+  allocations PaymentAllocation[]
+
+  @@unique([tenantId, number])
+  @@index([tenantId])
+  @@map("invoices")
+}
+
+model Assignment {
+  id        String    @id @default(uuid()) @db.Uuid
+  tenantId  String    @map("tenant_id") @db.Uuid
+  driverId  String    @map("driver_id") @db.Uuid
+  truckId   String    @map("truck_id") @db.Uuid
+  tripId    String?   @map("trip_id") @db.Uuid
+  startedAt DateTime  @map("started_at") @db.Timestamptz(3)
+  endedAt   DateTime? @map("ended_at") @db.Timestamptz(3)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+  driver Driver @relation(fields: [driverId], references: [id])
+  truck  Truck  @relation(fields: [truckId], references: [id])
+  trip   Trip?  @relation(fields: [tripId], references: [id])
+
+  @@index([tenantId])
+  @@map("assignments")
+}
+
+model TripStop {
+  id             String  @id @default(uuid()) @db.Uuid
+  tenantId       String  @map("tenant_id") @db.Uuid
+  tripId         String  @map("trip_id") @db.Uuid
+  seq            Int
+  kind           String
+  partyId        String? @map("party_id") @db.Uuid
+  place          String
+  goods          String?
+  lrNumber       String? @map("lr_number")
+  sealNumber     String? @map("seal_number")
+  polDone        Boolean @default(false) @map("pol_done")
+  podDone        Boolean @default(false) @map("pod_done")
+  loadWeightKg   Int?    @map("load_weight_kg")
+  unloadWeightKg Int?    @map("unload_weight_kg")
+  shortageNote   String? @map("shortage_note")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+  trip   Trip   @relation(fields: [tripId], references: [id])
+
+  @@unique([tenantId, lrNumber])
+  @@index([tenantId])
+  @@index([tripId])
+  @@map("trip_stops")
+}
+
+model SeriesCounter {
+  tenantId String @map("tenant_id") @db.Uuid
+  series   String
+  value    Int    @default(0)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@id([tenantId, series])
+  @@map("series_counters")
+}
+
+model Settlement {
+  id        String   @id @default(uuid()) @db.Uuid
+  tenantId  String   @map("tenant_id") @db.Uuid
+  tripId    String   @unique @map("trip_id") @db.Uuid
+  amount    Decimal  @db.Decimal(12, 2)
+  note      String?
+  settledAt DateTime @default(now()) @map("settled_at") @db.Timestamptz(3)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+  trip   Trip   @relation(fields: [tripId], references: [id])
+
+  @@index([tenantId])
+  @@map("settlements")
+}
+
+model ExpenseClaim {
+  id         String   @id @default(uuid()) @db.Uuid
+  tenantId   String   @map("tenant_id") @db.Uuid
+  tripId     String?  @map("trip_id") @db.Uuid
+  driverId   String   @map("driver_id") @db.Uuid
+  category   String
+  amount     Decimal  @db.Decimal(12, 2)
+  payable    Decimal  @db.Decimal(12, 2)
+  status     String
+  note       String?
+  claimedOn  DateTime @map("claimed_on") @db.Date
+  lat           Float?
+  lng           Float?
+  capturedAt    DateTime? @map("captured_at") @db.Timestamptz(3)
+  receiptFileId String?   @map("receipt_file_id") @db.Uuid
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+  trip   Trip?  @relation(fields: [tripId], references: [id])
+
+  @@index([tenantId])
+  @@map("expense_claims")
+}
+
+model Alert {
+  id           String    @id @default(uuid()) @db.Uuid
+  tenantId     String    @map("tenant_id") @db.Uuid
+  rule         String
+  severity     String
+  message      String
+  entityType   String    @map("entity_type")
+  entityId     String    @map("entity_id")
+  recipients   String[]
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  acknowledgedAt DateTime? @map("acknowledged_at") @db.Timestamptz(3)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@index([tenantId])
+  @@map("alerts")
+}
+
+model Payment {
+  id         String   @id @default(uuid()) @db.Uuid
+  tenantId   String   @map("tenant_id") @db.Uuid
+  partyId    String   @map("party_id") @db.Uuid
+  amount     Decimal  @db.Decimal(12, 2)
+  method     String
+  reference  String
+  receivedOn DateTime @map("received_on") @db.Date
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  tenant      Tenant              @relation(fields: [tenantId], references: [id])
+  party       Party               @relation(fields: [partyId], references: [id])
+  allocations PaymentAllocation[]
+
+  @@index([tenantId])
+  @@map("payments")
+}
+
+model PaymentAllocation {
+  id        String  @id @default(uuid()) @db.Uuid
+  tenantId  String  @map("tenant_id") @db.Uuid
+  paymentId String  @map("payment_id") @db.Uuid
+  invoiceId String  @map("invoice_id") @db.Uuid
+  amount    Decimal @db.Decimal(12, 2)
+
+  tenant  Tenant  @relation(fields: [tenantId], references: [id])
+  payment Payment @relation(fields: [paymentId], references: [id])
+  invoice Invoice @relation(fields: [invoiceId], references: [id])
+
+  @@index([tenantId])
+  @@map("payment_allocations")
+}
+
+model Purchase {
+  id         String   @id @default(uuid()) @db.Uuid
+  tenantId   String   @map("tenant_id") @db.Uuid
+  vendorName String   @map("vendor_name")
+  category   String
+  taxable    Decimal  @db.Decimal(12, 2)
+  gstRate    Decimal  @map("gst_rate") @db.Decimal(5, 2)
+  itcAmount  Decimal  @map("itc_amount") @db.Decimal(12, 2)
+  sourceType String   @map("source_type")
+  sourceId   String   @map("source_id")
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@index([tenantId])
+  @@map("purchases")
+}
+
+model OutboxMail {
+  id        String   @id @default(uuid()) @db.Uuid
+  tenantId  String   @map("tenant_id") @db.Uuid
+  subject   String
+  body      String
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@index([tenantId])
+  @@map("outbox_mails")
+}
+
+model Device {
+  id           String    @id @default(uuid()) @db.Uuid
+  tenantId     String    @map("tenant_id") @db.Uuid
+  truckId      String?   @map("truck_id") @db.Uuid
+  kind         String
+  serial       String
+  vendor       String
+  firmware     String
+  simNumber    String?   @map("sim_number")
+  status       String    @default("online")
+  warrantyUntil DateTime? @map("warranty_until") @db.Date
+  ais140Until  DateTime? @map("ais140_until") @db.Date
+  config       Json      @default("{}")
+  installedAt  DateTime  @default(now()) @map("installed_at") @db.Timestamptz(3)
+
+  tenant Tenant     @relation(fields: [tenantId], references: [id])
+  truck  Truck?     @relation(fields: [truckId], references: [id])
+  logs   DeviceLog[]
+
+  @@unique([tenantId, serial])
+  @@index([tenantId])
+  @@map("devices")
+}
+
+model DeviceLog {
+  id        String   @id @default(uuid()) @db.Uuid
+  tenantId  String   @map("tenant_id") @db.Uuid
+  deviceId  String   @map("device_id") @db.Uuid
+  truckId   String?  @map("truck_id") @db.Uuid
+  action    String
+  note      String
+  actorId   String?  @map("actor_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+  device Device @relation(fields: [deviceId], references: [id])
+
+  @@index([tenantId])
+  @@map("device_logs")
+}
+
+model TrackerState {
+  id                String    @id @default(uuid()) @db.Uuid
+  tenantId          String    @map("tenant_id") @db.Uuid
+  truckId           String    @unique @map("truck_id") @db.Uuid
+  lat               Float
+  lng               Float
+  speedKmh          Float     @map("speed_kmh")
+  pingAt            DateTime  @map("ping_at") @db.Timestamptz(3)
+  stoppedSince      DateTime? @map("stopped_since") @db.Timestamptz(3)
+  stopAlerted       Boolean   @default(false) @map("stop_alerted")
+  overspeedAlerted  Boolean   @default(false) @map("overspeed_alerted")
+  deviationAlerted  Boolean   @default(false) @map("deviation_alerted")
+  zones             Json      @default("[]")
+  tamperOpen        Boolean   @default(false) @map("tamper_open")
+  powerCutOpen      Boolean   @default(false) @map("power_cut_open")
+  signalLost        Boolean   @default(false) @map("signal_lost")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@index([tenantId])
+  @@map("tracker_states")
+}
+
+model BreathTest {
+  id          String    @id @default(uuid()) @db.Uuid
+  tenantId    String    @map("tenant_id") @db.Uuid
+  tripId      String    @map("trip_id") @db.Uuid
+  dueAt       DateTime  @map("due_at") @db.Timestamptz(3)
+  status      String    @default("pending")
+  completedAt DateTime? @map("completed_at") @db.Timestamptz(3)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+  trip   Trip   @relation(fields: [tripId], references: [id])
+
+  @@index([tenantId])
+  @@map("breath_tests")
+}
+
+model LeaveRequest {
+  id        String   @id @default(uuid()) @db.Uuid
+  tenantId  String   @map("tenant_id") @db.Uuid
+  driverId  String   @map("driver_id") @db.Uuid
+  startsOn  DateTime @map("starts_on") @db.Date
+  endsOn    DateTime @map("ends_on") @db.Date
+  reason    String
+  status    String   @default("pending")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@index([tenantId])
+  @@map("leave_requests")
+}
+
+model ArchiveRecord {
+  id          String   @id @default(uuid()) @db.Uuid
+  tenantId    String   @map("tenant_id") @db.Uuid
+  sourceTable String   @map("source_table")
+  sourceId    String   @map("source_id")
+  payload     Json
+  sealedHash  String   @map("sealed_hash")
+  archivedAt  DateTime @default(now()) @map("archived_at") @db.Timestamptz(3)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@unique([tenantId, sourceTable, sourceId])
+  @@index([tenantId])
+  @@map("archive_records")
+}
+
+model Attendance {
+  id       String   @id @default(uuid()) @db.Uuid
+  tenantId String   @map("tenant_id") @db.Uuid
+  driverId String   @map("driver_id") @db.Uuid
+  day      DateTime @db.Date
+  status   String
+  source   String
+  note     String?
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@unique([tenantId, driverId, day])
+  @@index([tenantId])
+  @@map("attendance")
+}
+
+model PayrollAdjustment {
+  id       String   @id @default(uuid()) @db.Uuid
+  tenantId String   @map("tenant_id") @db.Uuid
+  driverId String   @map("driver_id") @db.Uuid
+  month    String
+  kind     String
+  amount   Decimal  @db.Decimal(12, 2)
+  note     String?
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@index([tenantId])
+  @@map("payroll_adjustments")
+}
+
+model AlertRule {
+  id          String  @id @default(uuid()) @db.Uuid
+  tenantId    String  @map("tenant_id") @db.Uuid
+  key         String
+  enabled     Boolean @default(true)
+  threshold   Json    @default("{}")
+  notifyRoles String[] @map("notify_roles")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@unique([tenantId, key])
+  @@index([tenantId])
+  @@map("alert_rules")
+}
+
+model Booking {
+  id          String   @id @default(uuid()) @db.Uuid
+  tenantId    String   @map("tenant_id") @db.Uuid
+  partyName   String   @map("party_name")
+  phone       String
+  origin      String
+  destination String
+  goods       String
+  weightTons  Decimal  @map("weight_tons") @db.Decimal(10, 2)
+  status      String   @default("REQUESTED")
+  tripId      String?  @map("trip_id") @db.Uuid
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@index([tenantId])
+  @@map("bookings")
+}
+
+model Branch {
+  id        String   @id @default(uuid()) @db.Uuid
+  tenantId  String   @map("tenant_id") @db.Uuid
+  name      String
+  code      String
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  tenant Tenant  @relation(fields: [tenantId], references: [id])
+  users  User[]
+  trucks Truck[]
+
+  @@unique([tenantId, code])
+  @@index([tenantId])
+  @@map("branches")
+}
+
+model DocumentOverride {
+  id        String   @id @default(uuid()) @db.Uuid
+  tenantId  String   @map("tenant_id") @db.Uuid
+  truckId   String   @map("truck_id") @db.Uuid
+  tripId    String?  @map("trip_id") @db.Uuid
+  docType   String   @map("doc_type")
+  reason    String
+  actorId   String   @map("actor_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+  truck  Truck  @relation(fields: [truckId], references: [id])
+  trip   Trip?  @relation(fields: [tripId], references: [id])
+
+  @@index([tenantId])
+  @@map("document_overrides")
+}
+
+model LedgerEvent {
+  id         String   @id @default(uuid()) @db.Uuid
+  tenantId   String   @map("tenant_id") @db.Uuid
+  seq        Int
+  prevHash   String   @map("prev_hash")
+  hash       String
+  eventType  String   @map("event_type")
+  entityType String   @map("entity_type")
+  entityId   String   @map("entity_id")
+  actorId    String?  @map("actor_id") @db.Uuid
+  payload    Json
+  fileHashes String[] @map("file_hashes")
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@unique([tenantId, seq])
+  @@index([tenantId])
+  @@map("ledger_events")
+}

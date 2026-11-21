@@ -1,0 +1,10 @@
+node_modules
+.next
+data/uploads
+data/outbox
+.env
+*.log
+tsconfig.tsbuildinfo
+.vite
+dist
+coverage
