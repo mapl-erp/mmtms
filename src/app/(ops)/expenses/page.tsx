@@ -134,8 +134,26 @@ export default async function ExpensesPage({ searchParams }: { searchParams: Pro
             <input name="claimedOn" type="date" required />
           </label>
           <label>
+            Receipt photo
+            <input name="receipt" type="file" accept="image/*" capture="environment" required />
+          </label>
+          <div className="grid2">
+            <label>
+              GPS latitude
+              <input name="lat" type="number" step="0.0001" required />
+            </label>
+            <label>
+              GPS longitude
+              <input name="lng" type="number" step="0.0001" required />
+            </label>
+          </div>
+          <label>
+            Captured at
+            <input name="capturedAt" type="datetime-local" required />
+          </label>
+          <label>
             Note
-            <input name="note" placeholder="Receipt is tagged with GPS when the phone files it" />
+            <input name="note" />
           </label>
           <button className="btn" type="submit">
             Submit claim

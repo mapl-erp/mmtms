@@ -1,8 +1,7 @@
-import { readFile } from "node:fs/promises";
 import { NextResponse } from "next/server";
 import { withTenant } from "@/lib/db";
 import { readSession } from "@/lib/session";
-import { uploadPath } from "@/lib/verify";
+import { storageGet } from "@/lib/storage";
 
 export async function GET(_request: Request, context: { params: Promise<{ id: string }> }) {
   const session = await readSession();
@@ -12,7 +11,7 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
     tx.storedFile.findFirst({ where: { id, tenantId: session.tid } }),
   );
   if (!file) return NextResponse.json({ error: "Not found" }, { status: 404 });
-  const bytes = await readFile(uploadPath(file.path));
+  const bytes = await storageGet(file.path);
   return new NextResponse(new Uint8Array(bytes), {
     headers: { "content-type": file.mime, "cache-control": "private, max-age=3600" },
   });

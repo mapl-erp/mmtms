@@ -7,6 +7,7 @@ const NAV = [
   ["/desk", "Desk"],
   ["/fleet", "Fleet"],
   ["/drivers", "Drivers"],
+  ["/leave", "Leave"],
   ["/parties", "Parties"],
   ["/trips", "Trips"],
   ["/map", "Map"],

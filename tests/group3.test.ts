@@ -17,6 +17,7 @@ async function wipe(tenantId: string) {
     await admin.payrollAdjustment.deleteMany({ where: { tenantId } });
     await admin.alertRule.deleteMany({ where: { tenantId } });
     await admin.fuelFill.deleteMany({ where: { tenantId } });
+    await admin.storedFile.deleteMany({ where: { tenantId } });
     await admin.seriesCounter.deleteMany({ where: { tenantId } });
     await admin.ledgerEvent.deleteMany({ where: { tenantId } });
     await admin.user.deleteMany({ where: { tenantId } });
@@ -44,12 +45,14 @@ describe("claims, payroll, and fuel theft", () => {
     const manager: Actor = { id: randomUUID(), tenantId: tenant.id, role: "MANAGER", name: "M", driverId: null };
     const owner: Actor = { ...manager, role: "OWNER", name: "O" };
     try {
+      const receipt = { bytes: Buffer.from("receipt-photo-bytes"), mime: "image/jpeg" };
+      const tagged = { lat: 18.52, lng: 73.85, capturedAt: "2026-11-20T08:00:00.000Z", receipt };
       const food = await withTenant(tenant.id, (tx) =>
-        submitClaim(tx, manager, { driverId: driver.id, category: "FOOD", amount: 700, claimedOn: "2026-11-20", note: "dhaba" }),
+        submitClaim(tx, manager, { driverId: driver.id, category: "FOOD", amount: 700, claimedOn: "2026-11-20", note: "dhaba", ...tagged }),
       );
       expect(food.ok && Number(food.data.payable)).toBe(400);
       const repair = await withTenant(tenant.id, (tx) =>
-        submitClaim(tx, manager, { driverId: driver.id, category: "REPAIR", amount: 8000, claimedOn: "2026-11-20", note: "puncture" }),
+        submitClaim(tx, manager, { driverId: driver.id, category: "REPAIR", amount: 8000, claimedOn: "2026-11-20", note: "puncture", ...tagged }),
       );
       expect(repair.ok && repair.data.status).toBe("pending_owner");
       if (!repair.ok) return;
@@ -58,7 +61,7 @@ describe("claims, payroll, and fuel theft", () => {
       const approved = await withTenant(tenant.id, (tx) => decideClaim(tx, owner, repair.data.id, "approved"));
       expect(approved.ok).toBe(true);
       const small = await withTenant(tenant.id, (tx) =>
-        submitClaim(tx, manager, { driverId: driver.id, category: "TOLL", amount: 200, claimedOn: "2026-11-20" }),
+        submitClaim(tx, manager, { driverId: driver.id, category: "TOLL", amount: 200, claimedOn: "2026-11-20", ...tagged }),
       );
       if (!small.ok) return;
       await withTenant(tenant.id, (tx) => decideClaim(tx, manager, small.data.id, "approved"));

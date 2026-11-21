@@ -1,5 +1,6 @@
 import { can } from "./access";
 import type { Tx } from "./db";
+import { storeBytes } from "./files";
 import { appendLedger } from "./ledger";
 import type { Actor } from "./session";
 import { parseSettings, type TenantSettings } from "./settings";
@@ -53,10 +54,15 @@ export async function submitClaim(
     note?: string;
     lat?: number | null;
     lng?: number | null;
+    capturedAt?: string | null;
+    receipt?: { bytes: Buffer; mime: string } | null;
   },
 ) {
   if (!can(actor, "expenses.claim") && !can(actor, "expenses.approve") && actor.role !== "OWNER") {
     return { ok: false as const, error: "You cannot file a claim" };
+  }
+  if (!input.receipt || input.lat == null || input.lng == null || !input.capturedAt) {
+    return { ok: false as const, error: "A claim needs a receipt photo tagged with GPS and time" };
   }
   const settings = await settingsOf(tx, actor.tenantId);
   const day = new Date(`${input.claimedOn}T00:00:00.000Z`);
@@ -78,6 +84,8 @@ export async function submitClaim(
     if (payable < input.amount) note = `${note} Food payable capped at the daily allowance.`.trim();
   }
   const status = payable > settings.ownerApprovalAboveInr ? "pending_owner" : "pending";
+  const receipt = await storeBytes(tx, actor.tenantId, input.receipt.bytes, input.receipt.mime, `${input.category} receipt`);
+  const capturedAt = new Date(input.capturedAt);
   const claim = await tx.expenseClaim.create({
     data: {
       tenantId: actor.tenantId,
@@ -89,8 +97,10 @@ export async function submitClaim(
       status,
       note: note || null,
       claimedOn: day,
-      lat: input.lat ?? null,
-      lng: input.lng ?? null,
+      lat: input.lat,
+      lng: input.lng,
+      capturedAt,
+      receiptFileId: receipt.id,
     },
   });
   await appendLedger(tx, {

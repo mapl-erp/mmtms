@@ -7,6 +7,8 @@ import { storeBytes } from "./files";
 import { round2 } from "./format";
 import { daysUntil } from "./settings";
 import { closureBlockers, nextFyLr } from "./lifecycle";
+import { sendSmsOtp } from "./notify";
+import { scheduleBreathTests } from "./safety";
 
 const NEXT: Record<string, string> = {
   PLANNED: "LOADING",
@@ -385,7 +387,10 @@ export async function advanceTrip(tx: Tx, actor: Actor, tripId: string) {
   }
   if (to === "IN_TRANSIT") {
     await tx.truck.update({ where: { id: trip.truckId }, data: { status: "in_transit" } });
-    console.info(`POD OTP for ${trip.number}: ${podOtp}`);
+    await scheduleBreathTests(tx, actor.tenantId, trip.id, new Date());
+    const consignee = trip.consigneeId ? await tx.party.findFirst({ where: { id: trip.consigneeId, tenantId: actor.tenantId } }) : null;
+    const sms = await sendSmsOtp(consignee?.phone ?? "", podOtp ?? "");
+    if (sms.mode === "simulator") console.info(`POD OTP for ${trip.number}: ${podOtp}`);
   }
   if (to === "DELIVERED" || to === "CLOSED") {
     const open = await tx.trip.count({

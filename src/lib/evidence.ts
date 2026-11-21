@@ -1,8 +1,7 @@
 import JSZip from "jszip";
-import { readFile } from "node:fs/promises";
 import type { Tx } from "./db";
 import { renderLr } from "./pdf";
-import { uploadPath } from "./verify";
+import { storageGet } from "./storage";
 
 export async function evidenceZip(tx: Tx, tenantId: string, tripId: string): Promise<{ name: string; bytes: Buffer } | null> {
   const trip = await tx.trip.findFirst({
@@ -31,7 +30,7 @@ export async function evidenceZip(tx: Tx, tenantId: string, tripId: string): Pro
   const folder = zip.folder("proofs");
   const manifest: { kind: string; sha256: string; capture: string; file: string }[] = [];
   for (const proof of trip.proofs) {
-    const bytes = await readFile(uploadPath(proof.file.path));
+    const bytes = await storageGet(proof.file.path);
     const filename = `${proof.kind.toLowerCase()}-${proof.file.sha256.slice(0, 10)}${proof.file.path.endsWith(".svg") ? ".svg" : proof.file.path.endsWith(".png") ? ".png" : ".jpg"}`;
     folder?.file(filename, bytes);
     manifest.push({ kind: proof.kind, sha256: proof.file.sha256, capture: proof.capture, file: `proofs/${filename}` });

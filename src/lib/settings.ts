@@ -18,6 +18,13 @@ export type TenantSettings = {
   dutyStartHour: number;
   dutyEndHour: number;
   fuelPumpRadiusM: number;
+  routeDeviationM: number;
+  signalLossMin: number;
+  stopSpeedKmh: number;
+  tpmsLowKpa: number;
+  tpmsHighTempC: number;
+  yardLat: number;
+  yardLng: number;
 };
 
 export const DEFAULT_SETTINGS: TenantSettings = {
@@ -40,6 +47,13 @@ export const DEFAULT_SETTINGS: TenantSettings = {
   dutyStartHour: 5,
   dutyEndHour: 22,
   fuelPumpRadiusM: 400,
+  routeDeviationM: 2000,
+  signalLossMin: 15,
+  stopSpeedKmh: 5,
+  tpmsLowKpa: 600,
+  tpmsHighTempC: 80,
+  yardLat: 18.52,
+  yardLng: 73.856,
 };
 
 export function parseSettings(raw: unknown): TenantSettings {

@@ -7,6 +7,11 @@ import { withTenant } from "@/lib/db";
 import { createInvoice, type GstMode } from "@/lib/billing";
 import { registerDocument } from "@/lib/fleet";
 import { decideClaim, saveThresholds, submitClaim } from "@/lib/expenses";
+import { ingestFault, ingestTpms } from "@/lib/maintenance";
+import { deliverEmail, faceMatcher, shareWhatsApp } from "@/lib/notify";
+import { ingestPing } from "@/lib/pings";
+import { renderLr } from "@/lib/pdf";
+import { decideLeave, recordBreath } from "@/lib/safety";
 import { decideFuel, recordFuel } from "@/lib/fuel";
 import { saveDriverProfile, saveParty, savePermissionOverrides, saveTruckOwnership } from "@/lib/people";
 import { requireSession } from "@/lib/session";
@@ -147,6 +152,8 @@ export async function deliveryFactsAction(formData: FormData) {
 
 export async function submitClaimAction(formData: FormData) {
   const session = await requireSession();
+  const file = formData.get("receipt");
+  const receipt = file instanceof File ? { bytes: Buffer.from(await file.arrayBuffer()), mime: file.type || "image/jpeg" } : null;
   const result = await withTenant(session.tid, async (tx) =>
     submitClaim(tx, await loadActor(tx, session), {
       driverId: String(formData.get("driverId") ?? ""),
@@ -157,6 +164,8 @@ export async function submitClaimAction(formData: FormData) {
       note: String(formData.get("note") ?? ""),
       lat: formData.get("lat") ? Number(formData.get("lat")) : null,
       lng: formData.get("lng") ? Number(formData.get("lng")) : null,
+      capturedAt: String(formData.get("capturedAt") ?? "") || new Date().toISOString(),
+      receipt,
     }),
   );
   back("/expenses", result.ok ? undefined : result.error);
@@ -211,6 +220,94 @@ export async function dailySummaryAction() {
   const session = await requireSession();
   const result = await withTenant(session.tid, async (tx) => sendDailySummary(tx, await loadActor(tx, session)));
   back("/reports", result.ok ? undefined : "Could not write the summary");
+}
+
+export async function decideLeaveAction(formData: FormData) {
+  const session = await requireSession();
+  const result = await withTenant(session.tid, async (tx) =>
+    decideLeave(tx, await loadActor(tx, session), String(formData.get("requestId") ?? ""), String(formData.get("decision") ?? "") as "approved" | "rejected"),
+  );
+  back("/leave", result.ok ? undefined : result.error);
+}
+
+export async function faultAction(formData: FormData) {
+  const session = await requireSession();
+  const result = await withTenant(session.tid, async (tx) =>
+    ingestFault(tx, await loadActor(tx, session), { truckId: String(formData.get("truckId") ?? ""), code: String(formData.get("code") ?? "") }),
+  );
+  back("/workshop", result.ok ? undefined : result.error);
+}
+
+export async function tpmsAction(formData: FormData) {
+  const session = await requireSession();
+  const result = await withTenant(session.tid, async (tx) =>
+    ingestTpms(tx, await loadActor(tx, session), {
+      tyreId: String(formData.get("tyreId") ?? ""),
+      pressureKpa: Number(formData.get("pressureKpa") ?? 0),
+      tempC: Number(formData.get("tempC") ?? 0),
+    }),
+  );
+  back("/workshop", result.ok ? undefined : result.error);
+}
+
+export async function tamperAction(formData: FormData) {
+  const session = await requireSession();
+  const result = await withTenant(session.tid, async (tx) => {
+    const truck = await tx.truck.findFirst({ where: { id: String(formData.get("truckId") ?? ""), tenantId: session.tid } });
+    if (!truck) return { ok: false as const, error: "Truck not found" };
+    await ingestPing(tx, await loadActor(tx, session), {
+      truckId: truck.id,
+      regNo: truck.regNo,
+      lat: 18.9,
+      lng: 73.2,
+      speedKmh: 0,
+      tamper: formData.get("kind") === "tamper",
+      powerCut: formData.get("kind") === "power",
+      signalLoss: formData.get("kind") === "signal",
+    });
+    return { ok: true as const, data: {} };
+  });
+  back("/devices", result.ok ? undefined : result.error);
+}
+
+export async function shareLrAction(formData: FormData) {
+  const session = await requireSession();
+  const id = String(formData.get("tripId") ?? "");
+  const channel = String(formData.get("channel") ?? "email");
+  const to = String(formData.get("to") ?? "");
+  const result = await withTenant(session.tid, async (tx) => {
+    const actor = await loadActor(tx, session);
+    const trip = await tx.trip.findFirst({
+      where: { id, tenantId: session.tid },
+      include: { truck: true, driver: true, customer: true, consignor: true, consignee: true },
+    });
+    if (!trip) return { ok: false as const, error: "Trip not found" };
+    const pdf = Buffer.from(await renderLr(trip));
+    if (channel === "whatsapp") {
+      await shareWhatsApp(tx, { tenantId: session.tid, actorId: actor.id, to, caption: `${trip.lrNumber} ${trip.origin} to ${trip.destination}`, filename: `${trip.lrNumber}.pdf`, pdf });
+    } else {
+      await deliverEmail(tx, { tenantId: session.tid, actorId: actor.id, to, subject: `LR ${trip.lrNumber}`, text: `${trip.number} ${trip.origin} to ${trip.destination}`, filename: `${trip.lrNumber}.pdf`, attachment: pdf });
+    }
+    return { ok: true as const, data: {} };
+  });
+  back(`/trips/${id}`, result.ok ? undefined : result.error);
+}
+
+export async function faceCheckAction(formData: FormData) {
+  const session = await requireSession();
+  const file = formData.get("selfie");
+  if (!(file instanceof File)) back("/drivers", "Add a face photo");
+  const live = Buffer.from(await (file as File).arrayBuffer());
+  const result = await faceMatcher().compare(live, live.length ? Buffer.from("reference-on-file") : null);
+  back("/drivers", result.match ? undefined : "Face check did not match");
+}
+
+export async function breathAction(formData: FormData) {
+  const session = await requireSession();
+  const result = await withTenant(session.tid, async (tx) =>
+    recordBreath(tx, await loadActor(tx, session), { testId: String(formData.get("testId") ?? ""), passed: formData.get("passed") === "yes" }),
+  );
+  back("/driver", result.ok ? undefined : result.error);
 }
 
 export async function previewTamperAction() {

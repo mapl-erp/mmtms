@@ -1,3 +1,4 @@
+import { tamperAction } from "@/app/(ops)/actions";
 import { immobiliseAction, unlockAction, dmsAction, clipAction } from "@/app/(ops)/device-actions";
 import { Flash, Pill } from "@/components/ui";
 import { CAMERAS } from "@/lib/devices";
@@ -76,6 +77,20 @@ export default async function DevicesPage({ searchParams }: { searchParams: Prom
                   </label>
                   <button className="btn" type="submit">
                     Unlock at delivery
+                  </button>
+                </form>
+              ) : null}
+              {device.kind === "GPS" && device.truck ? (
+                <form action={tamperAction} className="form" style={{ marginTop: 10 }}>
+                  <input type="hidden" name="truckId" value={device.truck.id} />
+                  <button className="btn secondary" name="kind" value="tamper" type="submit">
+                    Report tamper
+                  </button>
+                  <button className="btn secondary" name="kind" value="power" type="submit">
+                    Report power cut
+                  </button>
+                  <button className="btn secondary" name="kind" value="signal" type="submit">
+                    Report signal loss
                   </button>
                 </form>
               ) : null}

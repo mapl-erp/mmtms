@@ -1,6 +1,5 @@
-import { mkdir, writeFile } from "node:fs/promises";
-import path from "node:path";
 import { booksPort } from "./books";
+import { deliverEmail } from "./notify";
 import type { Tx } from "./db";
 import { appendLedger } from "./ledger";
 import { financialYear } from "./lifecycle";
@@ -104,19 +103,12 @@ export async function composeDailySummary(tx: Tx, tenantId: string) {
 
 export async function sendDailySummary(tx: Tx, actor: Actor) {
   const message = await composeDailySummary(tx, actor.tenantId);
-  const row = await tx.outboxMail.create({
-    data: { tenantId: actor.tenantId, subject: message.subject, body: message.body },
-  });
-  const dir = path.join(process.cwd(), "data", "outbox");
-  await mkdir(dir, { recursive: true });
-  await writeFile(path.join(dir, `${row.id}.eml`), `Subject: ${message.subject}\n\n${message.body}\n`);
-  await appendLedger(tx, {
+  const sent = await deliverEmail(tx, {
     tenantId: actor.tenantId,
-    eventType: "email.summary",
-    entityType: "outbox_mail",
-    entityId: row.id,
     actorId: actor.id,
-    payload: { subject: message.subject },
+    to: process.env.SMTP_FROM || "desk@mighty-movers.example",
+    subject: message.subject,
+    text: message.body,
   });
-  return { ok: true as const, data: row };
+  return { ok: true as const, data: sent };
 }

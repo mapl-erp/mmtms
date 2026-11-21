@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { advanceTripAction, deliveryFactsAction, settleTripAction } from "@/app/(ops)/actions";
+import { advanceTripAction, deliveryFactsAction, settleTripAction, shareLrAction } from "@/app/(ops)/actions";
 import { Flash, Pill, Plate } from "@/components/ui";
 import { withTenant } from "@/lib/db";
 import { inr, num, titleCase } from "@/lib/format";
@@ -175,6 +175,19 @@ export default async function TripPage({
               </button>
             </form>
           ) : null}
+          <form action={shareLrAction} className="form" style={{ marginTop: 12 }}>
+            <input type="hidden" name="tripId" value={trip.id} />
+            <label>
+              Share LR to
+              <input name="to" placeholder="email or WhatsApp number" />
+            </label>
+            <button className="btn secondary" name="channel" value="email" type="submit">
+              Email PDF
+            </button>
+            <button className="btn secondary" name="channel" value="whatsapp" type="submit">
+              WhatsApp PDF
+            </button>
+          </form>
           <form action={deliveryFactsAction} className="form" style={{ marginTop: 12 }}>
             <label>
               Delivery seal

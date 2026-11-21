@@ -377,6 +377,62 @@ export function DriverConsole({ trip, driverName }: { trip: Trip | null; driverN
                 Save signature
               </button>
             </section>
+            <form
+              className="capture"
+              onSubmit={(event) => {
+                event.preventDefault();
+                const data = new FormData(event.currentTarget);
+                void fetch("/api/driver/leave", {
+                  method: "POST",
+                  headers: { "content-type": "application/json" },
+                  body: JSON.stringify({
+                    startsOn: data.get("startsOn"),
+                    endsOn: data.get("endsOn"),
+                    reason: data.get("reason"),
+                  }),
+                }).then(async (response) => {
+                  const body = (await response.json()) as { error?: string };
+                  setMessage(response.ok ? "Leave request sent" : body.error ?? "Leave failed");
+                });
+              }}
+            >
+              <strong>Leave</strong>
+              <input name="startsOn" type="date" required />
+              <input name="endsOn" type="date" required />
+              <input name="reason" placeholder="Reason" required />
+              <button className="btn secondary" type="submit">
+                Apply
+              </button>
+            </form>
+            <button
+              className="btn secondary"
+              type="button"
+              onClick={() => {
+                if (!trip) return;
+                void postProof("LOAD_PHOTO", stampStill("RECEIPT"), "stamped_still").then(() =>
+                  fetch("/api/driver/claim", {
+                    method: "POST",
+                    headers: { "content-type": "application/json" },
+                    body: JSON.stringify({
+                      tripId: trip.id,
+                      category: "TOLL",
+                      amount: 120,
+                      claimedOn: new Date().toISOString().slice(0, 10),
+                      note: "Toll receipt",
+                      lat: 18.52,
+                      lng: 73.85,
+                      capturedAt: new Date().toISOString(),
+                      dataUrl: stampStill("RECEIPT"),
+                    }),
+                  }).then(async (response) => {
+                    const body = (await response.json()) as { error?: string };
+                    setMessage(response.ok ? "Claim filed with receipt" : body.error ?? "Claim failed");
+                  }),
+                );
+              }}
+            >
+              File a toll claim with receipt
+            </button>
             <button
               className="btn bad"
               type="button"

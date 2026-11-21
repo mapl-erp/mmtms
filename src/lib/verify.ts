@@ -1,8 +1,8 @@
 import { createHash } from "node:crypto";
-import { readFile } from "node:fs/promises";
 import path from "node:path";
 import type { Tx } from "./db";
 import { GENESIS, chainHash } from "./ledger";
+import { storageGet } from "./storage";
 
 export type ChainRow = {
   seq: number;
@@ -68,7 +68,7 @@ export async function verifyTenant(tx: Tx, tenantId: string) {
         breaks.push({ seq: event.seq, reason: `missing media ${hash.slice(0, 12)}` });
         continue;
       }
-      const bytes = await readFile(uploadPath(file.path));
+      const bytes = await storageGet(file.path);
       const got = createHash("sha256").update(bytes).digest("hex");
       if (got !== hash) {
         breaks.push({ seq: event.seq, reason: `media hash mismatch ${hash.slice(0, 12)}` });

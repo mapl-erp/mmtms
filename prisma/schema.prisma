@@ -3,8 +3,9 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 model Tenant {
@@ -46,6 +47,10 @@ model Tenant {
   bookings     Booking[]
   attendance   Attendance[]
   adjustments  PayrollAdjustment[]
+  trackerStates TrackerState[]
+  breathTests  BreathTest[]
+  leaveRequests LeaveRequest[]
+  archives     ArchiveRecord[]
 
   @@map("tenants")
 }
@@ -234,7 +239,9 @@ model Trip {
   brokerPartyId  String?   @map("broker_party_id") @db.Uuid
   commission     Decimal?  @db.Decimal(12, 2)
   ewayBillNo     String?   @map("eway_bill_no")
-  ewayValidUntil DateTime? @map("eway_valid_until") @db.Timestamptz(3)
+  ewayValidUntil     DateTime? @map("eway_valid_until") @db.Timestamptz(3)
+  driveReminderSent  Boolean   @default(false) @map("drive_reminder_sent")
+  driveAlertSent     Boolean   @default(false) @map("drive_alert_sent")
   distanceKm     Int?      @map("distance_km")
   podSealNumber  String?   @map("pod_seal_number")
   loadWeightKg   Int?      @map("load_weight_kg")
@@ -253,6 +260,7 @@ model Trip {
   stops       TripStop[]
   settlement  Settlement?
   expenses    ExpenseClaim[]
+  breathTests BreathTest[]
   proofs      Proof[]
   fuels       FuelFill[]
   invoices    Invoice[]
@@ -357,7 +365,9 @@ model Tyre {
   truckId  String @map("truck_id") @db.Uuid
   serial   String
   position String
-  kmRun    Int    @map("km_run")
+  kmRun       Int      @map("km_run")
+  pressureKpa Decimal? @map("pressure_kpa") @db.Decimal(8, 1)
+  tempC       Decimal? @map("temp_c") @db.Decimal(5, 1)
 
   tenant Tenant @relation(fields: [tenantId], references: [id])
   truck  Truck  @relation(fields: [truckId], references: [id])
@@ -473,9 +483,11 @@ model ExpenseClaim {
   status     String
   note       String?
   claimedOn  DateTime @map("claimed_on") @db.Date
-  lat        Float?
-  lng        Float?
-  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  lat           Float?
+  lng           Float?
+  capturedAt    DateTime? @map("captured_at") @db.Timestamptz(3)
+  receiptFileId String?   @map("receipt_file_id") @db.Uuid
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
 
   tenant Tenant @relation(fields: [tenantId], references: [id])
   trip   Trip?  @relation(fields: [tripId], references: [id])
@@ -605,6 +617,76 @@ model DeviceLog {
 
   @@index([tenantId])
   @@map("device_logs")
+}
+
+model TrackerState {
+  id                String    @id @default(uuid()) @db.Uuid
+  tenantId          String    @map("tenant_id") @db.Uuid
+  truckId           String    @unique @map("truck_id") @db.Uuid
+  lat               Float
+  lng               Float
+  speedKmh          Float     @map("speed_kmh")
+  pingAt            DateTime  @map("ping_at") @db.Timestamptz(3)
+  stoppedSince      DateTime? @map("stopped_since") @db.Timestamptz(3)
+  stopAlerted       Boolean   @default(false) @map("stop_alerted")
+  overspeedAlerted  Boolean   @default(false) @map("overspeed_alerted")
+  deviationAlerted  Boolean   @default(false) @map("deviation_alerted")
+  zones             Json      @default("[]")
+  tamperOpen        Boolean   @default(false) @map("tamper_open")
+  powerCutOpen      Boolean   @default(false) @map("power_cut_open")
+  signalLost        Boolean   @default(false) @map("signal_lost")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@index([tenantId])
+  @@map("tracker_states")
+}
+
+model BreathTest {
+  id          String    @id @default(uuid()) @db.Uuid
+  tenantId    String    @map("tenant_id") @db.Uuid
+  tripId      String    @map("trip_id") @db.Uuid
+  dueAt       DateTime  @map("due_at") @db.Timestamptz(3)
+  status      String    @default("pending")
+  completedAt DateTime? @map("completed_at") @db.Timestamptz(3)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+  trip   Trip   @relation(fields: [tripId], references: [id])
+
+  @@index([tenantId])
+  @@map("breath_tests")
+}
+
+model LeaveRequest {
+  id        String   @id @default(uuid()) @db.Uuid
+  tenantId  String   @map("tenant_id") @db.Uuid
+  driverId  String   @map("driver_id") @db.Uuid
+  startsOn  DateTime @map("starts_on") @db.Date
+  endsOn    DateTime @map("ends_on") @db.Date
+  reason    String
+  status    String   @default("pending")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@index([tenantId])
+  @@map("leave_requests")
+}
+
+model ArchiveRecord {
+  id          String   @id @default(uuid()) @db.Uuid
+  tenantId    String   @map("tenant_id") @db.Uuid
+  sourceTable String   @map("source_table")
+  sourceId    String   @map("source_id")
+  payload     Json
+  sealedHash  String   @map("sealed_hash")
+  archivedAt  DateTime @default(now()) @map("archived_at") @db.Timestamptz(3)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@unique([tenantId, sourceTable, sourceId])
+  @@index([tenantId])
+  @@map("archive_records")
 }
 
 model Attendance {

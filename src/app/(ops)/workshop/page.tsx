@@ -1,4 +1,4 @@
-import { completeJobAction } from "@/app/(ops)/actions";
+import { completeJobAction, faultAction, tpmsAction } from "@/app/(ops)/actions";
 import { Pill, Plate } from "@/components/ui";
 import { withTenant } from "@/lib/db";
 import { fmtDate, inr, num } from "@/lib/format";
@@ -94,6 +94,55 @@ export default async function WorkshopPage() {
             </tbody>
           </table>
         </article>
+      </div>
+      <div className="split section">
+        <form className="panel form" action={faultAction}>
+          <h2>J1939 fault</h2>
+          <label>
+            Truck
+            <select name="truckId">
+              {data.jobs.length
+                ? [...new Map(data.jobs.map((job) => [job.truck.id, job.truck])).values()].map((truck) => (
+                    <option key={truck.id} value={truck.id}>
+                      {truck.regNo}
+                    </option>
+                  ))
+                : null}
+            </select>
+          </label>
+          <label>
+            Code
+            <input name="code" defaultValue="SPN100.FMI1" />
+          </label>
+          <button className="btn secondary" type="submit">
+            Raise fault
+          </button>
+        </form>
+        <form className="panel form" action={tpmsAction}>
+          <h2>TPMS reading</h2>
+          <label>
+            Tyre
+            <select name="tyreId">
+              {data.tyres.map((tyre) => (
+                <option key={tyre.id} value={tyre.id}>
+                  {tyre.serial} · {tyre.position}
+                  {tyre.pressureKpa ? ` · ${tyre.pressureKpa} kPa` : ""}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Pressure kPa
+            <input name="pressureKpa" type="number" step="1" defaultValue="720" />
+          </label>
+          <label>
+            Temperature °C
+            <input name="tempC" type="number" step="0.1" defaultValue="45" />
+          </label>
+          <button className="btn secondary" type="submit">
+            Record reading
+          </button>
+        </form>
       </div>
     </>
   );

@@ -1,8 +1,7 @@
-import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type { Tx } from "./db";
 import { sha256Bytes } from "./ledger";
-import { uploadPath } from "./verify";
+import { storagePut } from "./storage";
 
 const MIME_EXT: Record<string, string> = {
   "image/png": ".png",
@@ -15,9 +14,7 @@ export async function storeBytes(tx: Tx, tenantId: string, bytes: Buffer, mime: 
   const sha256 = sha256Bytes(bytes);
   const ext = MIME_EXT[mime] ?? ".bin";
   const relative = path.join(tenantId, sha256.slice(0, 2), `${sha256}${ext}`);
-  const absolute = uploadPath(relative);
-  await mkdir(path.dirname(absolute), { recursive: true });
-  await writeFile(absolute, bytes);
+  await storagePut(relative, bytes, mime);
   return tx.storedFile.create({
     data: {
       tenantId,

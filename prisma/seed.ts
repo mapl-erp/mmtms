@@ -36,6 +36,10 @@ function istDay(offset: number): string {
 async function wipe(client: PrismaClient, tenantId: string) {
   await client.$executeRawUnsafe(`ALTER TABLE ledger_events DISABLE TRIGGER ledger_no_mutation`);
   try {
+    await client.breathTest.deleteMany({ where: { tenantId } });
+    await client.leaveRequest.deleteMany({ where: { tenantId } });
+    await client.trackerState.deleteMany({ where: { tenantId } });
+    await client.archiveRecord.deleteMany({ where: { tenantId } });
     await client.deviceLog.deleteMany({ where: { tenantId } });
     await client.device.deleteMany({ where: { tenantId } });
     await client.paymentAllocation.deleteMany({ where: { tenantId } });

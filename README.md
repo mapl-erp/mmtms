@@ -65,19 +65,21 @@ There is no broker in this build. Leave the simulator in place until `GPS_FEED=m
 
 The approved spec is in the app. These pieces are simulated rather than wired to a vendor:
 
-- GPS positions come from the corridor simulator, not a tracker.
-- Zoho Books pushes return a simulated id until `ZOHO_ACCESS_TOKEN` and `ZOHO_ORG_ID` are set. The Tally CSV is the fallback and is always real.
-- The daily summary is written to `data/outbox` and shown on Reports. There is no SMTP sender.
-- Immobiliser, e-lock, DMS, and the six-camera recorder are adapter interfaces with simulators. Event clips are hashed into the ledger.
-- Consignee OTP is shown on the driver phone in development and printed in the server log. No SMS is sent.
-- Phone OTP and face check at login are named and unwired.
+- GPS positions come from the corridor simulator. Each ping still runs the tracking rules (deviation, stop, overspeed, geofence, tamper, power cut, signal loss) and writes alerts to the ledger.
+- Zoho Books pushes return a simulated id until `ZOHO_ACCESS_TOKEN` and `ZOHO_ORG_ID` are set. Token setup is in DEPLOY.md. The Tally CSV stays available.
+- Mail, WhatsApp LR shares, and the daily summary use SMTP or the WhatsApp Cloud API when those variables are set, and the outbox otherwise.
+- Consignee OTP uses MSG91 when `MSG91_AUTH_KEY` is set. Otherwise it is shown on the driver phone in development and printed in the server log.
+- Face match has a simulator so the check can run end to end. A vendor SDK is not connected.
+- Immobiliser, e-lock, DMS, breath tests, J1939 faults, TPMS, and the six-camera recorder are adapter interfaces with simulators. Event clips are hashed into the ledger.
 - ULIP, VAHAN, and the government e-way API are not called. The customer generates the e-way bill and the desk stores the number and its expiry.
 - Subscription billing for other transporters is not built. A second tenant is another row behind the same RLS policies.
 
 Thresholds (overspeed, stop time, food cap, owner-approval amount, fuel drop, km/l ratio, weight shortage, e-way warning, immobiliser speed, geofence) live on the tenant and are edited under Alerts.
 
-`npm test` covers the hash chain, a real tampered ledger row, a changed media file, row-level security, the trip lifecycle, per-tenant financial-year LR numbers, encrypted KYC, the expired-document override, fuel theft, 18% GST with receipt matching, and the immobiliser and e-lock rules.
+`npm test` covers the hash chain, a real tampered ledger row, a changed media file, row-level security, the trip lifecycle, per-tenant financial-year LR numbers, encrypted KYC, the expired-document override, fuel theft, 18% GST with receipt matching, the immobiliser and e-lock rules, tracking alerts, breath-test failures, receipt-gated claims, leave pay, TPMS and J1939, retention sealing, the face simulator, and the cron secret.
 
 ## Roadmap still open
 
-Live ULIP, VAHAN, and e-way bill calls. A real MQTT subscriber in front of `src/lib/gps.ts`. The company’s own device in place of the simulators. SaaS onboarding and subscription billing.
+Hosting steps are in [DEPLOY.md](DEPLOY.md).
+
+Live ULIP, VAHAN, and government e-way calls still need a government account. GPS, the immobiliser, the e-lock, DMS, TPMS, J1939, breath tests, and face match run on simulators until a device or provider is connected. Zoho, SMTP, WhatsApp, and MSG91 stay on the outbox or the on-screen OTP until their environment variables are set. SaaS subscription billing is not part of this build.
