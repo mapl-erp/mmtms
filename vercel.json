@@ -1,7 +1,14 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "crons": [
-    { "path": "/api/cron/daily", "schedule": "0 2 * * *" },
-    { "path": "/api/cron/retention", "schedule": "0 3 * * *" }
-  ]
+    {
+      "path": "/api/cron/daily",
+      "schedule": "0 2 * * *"
+    },
+    {
+      "path": "/api/cron/retention",
+      "schedule": "0 3 * * *"
+    }
+  ],
+  "buildCommand": "prisma migrate deploy && (if [ -n \"$OWNER_PASSWORD\" ]; then tsx prisma/seed-production.ts; fi) && next build"
 }
